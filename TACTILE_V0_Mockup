@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TACTILE</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+:root {
+  --black: #060606;
+  --white: #f0f0ec;
+  --gray:  #777;
+  --border:rgba(240,240,236,0.10);
+}
+body {
+  background:var(--black);
+  color:var(--white);
+  font-family:'DM Sans',sans-serif;
+  overflow:hidden;
+  width:100vw; height:100vh;
+  user-select:none;
+}
+#video {
+  position:fixed; inset:0;
+  width:100%; height:100%;
+  object-fit:cover;
+  transform:scaleX(-1);
+  opacity:0.35; z-index:0;
+}
+#hand-canvas {
+  position:fixed; inset:0;
+  width:100%; height:100%;
+  transform:scaleX(-1);
+  z-index:2; pointer-events:none;
+}
+#stage {
+  position:fixed;
+  top:56px; left:0; right:0; bottom:44px;
+  z-index:5; pointer-events:none;
+  overflow:hidden;
+}
+
+/* ── Cards ─────────────────────────────────────────── */
+.card {
+  position:absolute;
+  background:rgba(8,8,8,0.88);
+  border:1px solid rgba(240,240,236,0.13);
+  backdrop-filter:blur(18px);
+  pointer-events:all;
+  transition:border-color 0.12s, box-shadow 0.12s;
+  min-width:180px;
+}
+.card.near    { border-color:rgba(240,240,236,0.4); }
+.card.grabbed {
+  border-color:rgba(240,240,236,0.8);
+  box-shadow:0 0 0 1px rgba(240,240,236,0.12), 0 24px 60px rgba(0,0,0,0.7);
+  z-index:999 !important;
+}
+.card.sky   { border-color:rgba(147,210,255,0.30); }
+.card.mint  { border-color:rgba(134,239,172,0.30); }
+.card.amber { border-color:rgba(253,186,116,0.30); }
+.card.rose  { border-color:rgba(249,168,212,0.30); }
+.card-bar {
+  height:32px; display:flex; align-items:center; justify-content:space-between;
+  padding:0 12px; border-bottom:1px solid rgba(240,240,236,0.06);
+}
+.card-label { font-size:9px; letter-spacing:0.16em; text-transform:uppercase; color:rgba(240,240,236,0.28); }
+.card-dots  { display:flex; gap:4px; }
+.cd { width:6px;height:6px;border-radius:50%;background:rgba(240,240,236,0.1); }
+.card-body  { padding:12px; }
+.pre-btn {
+  width:100%; padding:8px; background:var(--white); color:var(--black);
+  font-family:'DM Sans',sans-serif; font-size:11px; font-weight:500;
+  letter-spacing:0.06em; text-align:center; border:none; cursor:default;
+}
+.pre-input {
+  width:100%; padding:7px 10px; background:transparent;
+  border:1px solid rgba(240,240,236,0.18); color:rgba(240,240,236,0.38);
+  font-family:'DM Sans',sans-serif; font-size:11px; outline:none; cursor:default;
+}
+.pre-card-wrap { background:rgba(240,240,236,0.03); border:1px solid rgba(240,240,236,0.08); padding:10px; }
+.pre-card-title { font-size:12px; font-weight:500; margin-bottom:4px; }
+.pre-card-body  { font-size:10px; color:rgba(240,240,236,0.38); line-height:1.5; }
+.pre-nav { display:flex; align-items:center; gap:14px; border-bottom:1px solid rgba(240,240,236,0.1); padding-bottom:8px; }
+.pre-nav-logo { font-size:12px; font-weight:500; }
+.pre-nav-link { font-size:10px; letter-spacing:0.06em; color:rgba(240,240,236,0.38); text-transform:uppercase; }
+.pre-hero { text-align:center; }
+.pre-hero-title { font-family:'Bebas Neue',sans-serif; font-size:24px; letter-spacing:0.08em; margin-bottom:4px; }
+.pre-hero-sub   { font-size:10px; color:rgba(240,240,236,0.38); }
+.pre-toggle-row { display:flex; align-items:center; gap:10px; }
+.pre-track { width:34px;height:18px;border:1px solid rgba(240,240,236,0.2);position:relative;border-radius:100px; }
+.pre-thumb { position:absolute;right:2px;top:2px;width:12px;height:12px;background:var(--white);border-radius:50%; }
+.pre-toggle-label { font-size:11px; color:rgba(240,240,236,0.45); }
+
+/* ── Ghost preview ──────────────────────────────────── */
+#ghost {
+  position:fixed; pointer-events:none; z-index:20;
+  background:rgba(8,8,8,0.65);
+  border:1px dashed rgba(240,240,236,0.4);
+  backdrop-filter:blur(10px);
+  display:none; padding:12px; min-width:180px;
+}
+#ghost-label {
+  font-size:9px; letter-spacing:0.2em; text-transform:uppercase;
+  color:rgba(240,240,236,0.45); margin-bottom:8px;
+}
+
+/* ── Hold rings ─────────────────────────────────────── */
+.hold-ring { position:fixed; pointer-events:none; z-index:25; display:none; }
+.hold-ring svg { transform:rotate(-90deg); }
+
+/* ── Hand cursors ───────────────────────────────────── */
+.hand-cursor {
+  position:fixed; border-radius:50%; pointer-events:none;
+  transform:translate(-50%,-50%); z-index:30; display:none;
+  transition:width 0.08s, height 0.08s, background 0.08s;
+}
+#cursor-r { width:13px;height:13px;background:rgba(240,240,236,0.9);box-shadow:0 0 14px rgba(240,240,236,0.4); }
+#cursor-l { width:9px;height:9px;background:rgba(147,210,255,0.85);box-shadow:0 0 10px rgba(147,210,255,0.5); }
+#cursor-r.pinch { width:6px;height:6px;box-shadow:0 0 22px white; }
+#cursor-l.pinch { width:5px;height:5px; }
+
+/* ── Top bar ────────────────────────────────────────── */
+#topbar {
+  position:fixed; top:0;left:0;right:0; height:56px;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 24px;
+  background:rgba(6,6,6,0.82); border-bottom:1px solid var(--border);
+  backdrop-filter:blur(24px); z-index:50;
+}
+.logo { font-family:'Bebas Neue',sans-serif; font-size:26px; letter-spacing:0.12em; }
+#hud {
+  display:flex; align-items:center; gap:12px;
+  background:rgba(240,240,236,0.04); border:1px solid var(--border);
+  padding:6px 18px; min-width:270px; justify-content:center;
+}
+#hud-icon { font-size:18px; line-height:1; }
+#hud-text { font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--gray); }
+#hud-text.active { color:var(--white); }
+.topright { display:flex; gap:10px; align-items:center; }
+.btn {
+  background:var(--white); color:var(--black); border:none;
+  padding:8px 20px; font-family:'DM Sans',sans-serif;
+  font-size:10px; font-weight:500; letter-spacing:0.1em; text-transform:uppercase;
+  cursor:pointer; transition:opacity 0.2s;
+}
+.btn:hover { opacity:0.8; }
+.btn.ghost { background:transparent; color:var(--gray); border:1px solid var(--border); }
+.btn.ghost:hover { color:var(--white); border-color:rgba(240,240,236,0.3); }
+
+/* ── Status bar ─────────────────────────────────────── */
+#statusbar {
+  position:fixed; bottom:0;left:0;right:0; height:44px;
+  display:flex; align-items:center; padding:0 20px; gap:22px;
+  background:rgba(6,6,6,0.82); border-top:1px solid var(--border);
+  backdrop-filter:blur(24px); z-index:50;
+}
+.stat { display:flex; align-items:center; gap:6px; font-size:9px; letter-spacing:0.12em; text-transform:uppercase; color:rgba(240,240,236,0.28); }
+.stat.live { color:rgba(240,240,236,0.7); }
+.dot { width:5px;height:5px;border-radius:50%;background:#1e1e1e;flex-shrink:0; }
+.dot.on  { background:var(--white); box-shadow:0 0 5px rgba(240,240,236,0.5); animation:blink 2s infinite; }
+.dot.sky { background:rgba(147,210,255,0.85); box-shadow:0 0 5px rgba(147,210,255,0.4); animation:blink 1.8s infinite; }
+.dot.warn{ background:rgba(253,186,116,0.85); }
+@keyframes blink { 0%,100%{opacity:1}50%{opacity:0.25} }
+.stat-push { margin-left:auto; }
+
+/* ── Legend ─────────────────────────────────────────── */
+#legend {
+  position:fixed; top:68px; right:14px;
+  background:rgba(6,6,6,0.88); border:1px solid var(--border);
+  backdrop-filter:blur(20px); padding:14px 16px; z-index:50; width:196px;
+}
+.leg-head { font-size:8px; letter-spacing:0.22em; text-transform:uppercase; color:rgba(240,240,236,0.18); margin-bottom:10px; }
+.leg-sec  { font-size:8px; letter-spacing:0.18em; text-transform:uppercase; color:rgba(240,240,236,0.13); margin:10px 0 6px; }
+.leg-row  { display:flex; gap:8px; align-items:flex-start; margin-bottom:7px; }
+.leg-em   { font-size:14px; line-height:1.1; flex-shrink:0; width:20px; }
+.leg-txt  { font-size:10px; color:rgba(240,240,236,0.4); line-height:1.4; }
+.leg-k    { display:inline; font-size:8px; letter-spacing:0.08em; color:rgba(240,240,236,0.22); border:1px solid rgba(240,240,236,0.1); padding:1px 4px; margin-right:2px; }
+
+/* ── Toast ──────────────────────────────────────────── */
+#toast {
+  position:fixed; bottom:56px; left:50%;
+  transform:translateX(-50%) translateY(8px);
+  background:rgba(240,240,236,0.07); border:1px solid rgba(240,240,236,0.16);
+  backdrop-filter:blur(20px); padding:9px 20px;
+  font-size:10px; letter-spacing:0.1em; text-transform:uppercase;
+  color:var(--white); z-index:200; pointer-events:none;
+  opacity:0; transition:opacity 0.2s, transform 0.2s; white-space:nowrap;
+}
+#toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+/* ── Loading ────────────────────────────────────────── */
+#loading {
+  position:fixed; inset:0; background:var(--black);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px;
+  z-index:9999; transition:opacity 0.5s;
+}
+#loading .logo { font-size:72px; letter-spacing:0.14em; }
+#load-sub  { font-size:9px; letter-spacing:0.22em; text-transform:uppercase; color:var(--gray); }
+#load-bar  { width:160px;height:1px;background:rgba(240,240,236,0.07);overflow:hidden; }
+#load-fill { height:100%;background:var(--white);width:0;transition:width 0.35s; }
+</style>
+</head>
+<body>
+
+<video id="video" autoplay playsinline muted></video>
+<canvas id="hand-canvas"></canvas>
+<div id="stage"></div>
+
+<!-- Ghost -->
+<div id="ghost"><div id="ghost-label"></div><div id="ghost-body"></div></div>
+
+<!-- Hold rings -->
+<div class="hold-ring" id="ring-r">
+  <svg width="64" height="64">
+    <circle cx="32" cy="32" r="27" fill="none" stroke="rgba(240,240,236,0.07)" stroke-width="1.5"/>
+    <circle id="arc-r" cx="32" cy="32" r="27" fill="none" stroke="rgba(240,240,236,0.9)" stroke-width="1.5"
+      stroke-dasharray="169.6" stroke-dashoffset="169.6"/>
+  </svg>
+</div>
+<div class="hold-ring" id="ring-l">
+  <svg width="64" height="64">
+    <circle cx="32" cy="32" r="27" fill="none" stroke="rgba(147,210,255,0.07)" stroke-width="1.5"/>
+    <circle id="arc-l" cx="32" cy="32" r="27" fill="none" stroke="rgba(147,210,255,0.9)" stroke-width="1.5"
+      stroke-dasharray="169.6" stroke-dashoffset="169.6"/>
+  </svg>
+</div>
+
+<!-- Cursors -->
+<div class="hand-cursor" id="cursor-r"></div>
+<div class="hand-cursor" id="cursor-l"></div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Loading -->
+<div id="loading">
+  <div class="logo">TACTILE</div>
+  <div id="load-sub">Initializing hand tracking...</div>
+  <div id="load-bar"><div id="load-fill"></div></div>
+</div>
+
+<!-- Top bar -->
+<div id="topbar">
+  <div class="logo">TACTILE</div>
+  <div id="hud"><span id="hud-icon">✋</span><span id="hud-text">Show your hands to begin</span></div>
+  <div class="topright">
+    <button class="btn ghost" onclick="clearAll()">Clear</button>
+    <button class="btn" onclick="syncFigma()">↑ Sync to Figma</button>
+  </div>
+</div>
+
+<!-- Status bar -->
+<div id="statusbar">
+  <div class="stat" id="s-cam"><div class="dot" id="d-cam"></div><span>Camera</span></div>
+  <div class="stat" id="s-mp" ><div class="dot" id="d-mp" ></div><span>MediaPipe</span></div>
+  <div class="stat" id="s-rh" ><div class="dot" id="d-rh" ></div><span id="l-rh">Right hand</span></div>
+  <div class="stat" id="s-lh" ><div class="dot" id="d-lh" ></div><span id="l-lh">Left hand</span></div>
+  <div class="stat" id="s-ws" ><div class="dot" id="d-ws" ></div><span>Figma WS</span></div>
+  <div class="stat stat-push" id="stat-count">0 components</div>
+</div>
+
+<!-- Legend -->
+<div id="legend">
+  <div class="leg-head">Gesture Map</div>
+  <div class="leg-sec">✦ Create — instant</div>
+  <div class="leg-row"><span class="leg-em">☝️</span><span class="leg-txt">Index only → Button</span></div>
+  <div class="leg-row"><span class="leg-em">✌️</span><span class="leg-txt">Peace → Card</span></div>
+  <div class="leg-row"><span class="leg-em">🤘</span><span class="leg-txt">Rock → Input</span></div>
+  <div class="leg-row"><span class="leg-em">👍</span><span class="leg-txt">Thumb up → Navbar</span></div>
+  <div class="leg-row"><span class="leg-em">🖐</span><span class="leg-txt">Open palm = idle</span></div>
+  <div class="leg-sec">✦ Move &amp; Edit</div>
+  <div class="leg-row"><span class="leg-em">👌</span><span class="leg-txt">Pinch — grab &amp; drag</span></div>
+  <div class="leg-row"><span class="leg-em">↔️</span><span class="leg-txt">Both hands — resize</span></div>
+  <div class="leg-sec">✦ Actions</div>
+  <div class="leg-row"><span class="leg-em">✊</span><span class="leg-txt">Fist hold — delete</span></div>
+  <div class="leg-row"><span class="leg-em">🤙</span><span class="leg-txt">Index+thumb — sync</span></div>
+</div>
+
+<script type="module">
+import { HandLandmarker, FilesetResolver }
+  from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
+
+// ── Refs ─────────────────────────────────────────────
+const video    = document.getElementById('video');
+const hCanvas  = document.getElementById('hand-canvas');
+const hCtx     = hCanvas.getContext('2d');
+const stage    = document.getElementById('stage');
+const ghost    = document.getElementById('ghost');
+const ghostLbl = document.getElementById('ghost-label');
+const ghostBod = document.getElementById('ghost-body');
+
+// ── State ────────────────────────────────────────────
+let landmarker  = null;
+let lastTime    = -1;
+let cards       = [];
+let grabbedCard = null;
+let grabOff     = {x:0,y:0};
+let zTop        = 20;
+let schemeIdx   = 0;
+const SCHEMES    = ['default','sky','mint','amber','rose'];
+const HOLD_ACT   = 22;   // hold frames for delete/sync (intentional destructive actions)
+const CREATE_DBG = 5;    // tiny debounce — fires after ~150ms of stable gesture
+const CREATE_CD  = 45;   // cooldown after creation so it can't re-spam
+let prevSpread   = null;
+let lastRPos     = {x:0,y:0};
+
+const hs = {
+  r: {create:0, fist:0, point:0, prevFingers:-1, cooldown:0},
+  l: {fist:0},
+};
+
+// ── Components — keyed by gesture name, not finger count ──
+// Gestures chosen to be visually DISTINCT from open palm (5 fingers)
+const COMP_MAP = {
+  // ☝️ Index only — unmistakable single finger
+  index:  { id:'button', name:'Button',  sign:'☝️', html:()=>`<button class="pre-btn">Click Me</button>` },
+  // ✌️ Peace — index + middle, ring + pinky curled
+  peace:  { id:'card',   name:'Card',    sign:'✌️', html:()=>`<div class="pre-card-wrap"><div class="pre-card-title">Card Title</div><div class="pre-card-body">A short description of this card component.</div></div>` },
+  // 🤘 Rock — index + pinky up, middle + ring curled (very distinct from open palm)
+  rock:   { id:'input',  name:'Input',   sign:'🤘', html:()=>`<input class="pre-input" placeholder="Type something..." readonly>` },
+  // 👍 Thumb up — thumb extended, all fingers curled (nothing like open palm)
+  thumb:  { id:'nav',    name:'Navbar',  sign:'👍', html:()=>`<div class="pre-nav"><span class="pre-nav-logo">LOGO</span><span class="pre-nav-link">Home</span><span class="pre-nav-link">Work</span><span class="pre-nav-link">About</span></div>` },
+};
+
+// ── Ghost ─────────────────────────────────────────────
+let ghostComp = null;
+function showGhost(comp, sx, sy) {
+  if (ghostComp !== comp) {
+    ghostLbl.textContent = comp.name;
+    ghostBod.innerHTML = comp.html();
+    ghostComp = comp;
+  }
+  ghost.style.display = 'block';
+  ghost.style.left = (sx + 22) + 'px';
+  ghost.style.top  = (sy - 28) + 'px';
+}
+function hideGhost() { ghost.style.display='none'; ghostComp=null; }
+
+// ── Card lifecycle ────────────────────────────────────
+function spawnCard(comp, sx, sy) {
+  const sr = stage.getBoundingClientRect();
+  const x  = Math.max(0, Math.min(sr.width-240,  sx - sr.left - 110));
+  const y  = Math.max(0, Math.min(sr.height-120, sy - sr.top  -  50));
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.style.cssText = `left:${x}px;top:${y}px;width:220px;z-index:${zTop++};opacity:0;transform:scale(0.9) translateY(8px)`;
+  el.innerHTML = `<div class="card-bar"><span class="card-label">${comp.name}</span><div class="card-dots"><div class="cd"></div><div class="cd"></div><div class="cd"></div></div></div><div class="card-body">${comp.html()}</div>`;
+  const data = {el, comp, id:comp.id};
+  cards.push(data);
+  stage.appendChild(el);
+  requestAnimationFrame(()=>{
+    el.style.transition='opacity 0.22s,transform 0.22s';
+    el.style.opacity='1'; el.style.transform='scale(1) translateY(0)';
+    setTimeout(()=>{ el.style.transition=''; },250);
+  });
+  el.addEventListener('mousedown', e=>mouseGrab(e,data));
+  updateCount();
+  return data;
+}
+
+function grabCard(data, sx, sy) {
+  if (grabbedCard && grabbedCard!==data) ungrab();
+  grabbedCard = data;
+  const r=data.el.getBoundingClientRect(), sr=stage.getBoundingClientRect();
+  grabOff={x:sx-(r.left-sr.left), y:sy-(r.top-sr.top)};
+  data.el.classList.add('grabbed');
+  data.el.style.zIndex=zTop++;
+}
+function moveGrabbed(sx,sy) {
+  if (!grabbedCard) return;
+  const sw=stage.offsetWidth, sh=stage.offsetHeight;
+  const w=grabbedCard.el.offsetWidth, h=grabbedCard.el.offsetHeight;
+  grabbedCard.el.style.left=Math.max(0,Math.min(sw-w,sx-grabOff.x))+'px';
+  grabbedCard.el.style.top =Math.max(0,Math.min(sh-h,sy-grabOff.y))+'px';
+}
+function ungrab() {
+  if (!grabbedCard) return;
+  grabbedCard.el.classList.remove('grabbed');
+  grabbedCard=null;
+}
+function deleteNearOrGrabbed() {
+  const target=grabbedCard||findNearest(lastRPos.x,lastRPos.y,160);
+  if (!target) return;
+  const el=target.el, d=target;
+  ungrab();
+  el.style.transition='opacity 0.2s,transform 0.2s';
+  el.style.opacity='0'; el.style.transform='scale(0.85) translateY(4px)';
+  setTimeout(()=>{ el.remove(); cards=cards.filter(c=>c!==d); updateCount(); },220);
+  showToast('Component removed');
+}
+function resizeGrabbed(delta) {
+  if (!grabbedCard) return;
+  const el=grabbedCard.el;
+  el.style.width=Math.max(160,Math.min(520,el.offsetWidth*delta))+'px';
+}
+function findNearest(mx,my,threshold=120) {
+  let best=null,bestD=threshold;
+  cards.forEach(c=>{
+    const r=c.el.getBoundingClientRect();
+    const d=Math.hypot(mx-(r.left+r.width/2),my-(r.top+r.height/2));
+    if(d<bestD){bestD=d;best=c;}
+  });
+  return best;
+}
+function clearAll(){cards.forEach(c=>c.el.remove());cards=[];grabbedCard=null;updateCount();showToast('Canvas cleared');}
+function updateCount(){document.getElementById('stat-count').textContent=`${cards.length} component${cards.length!==1?'s':''}`;}
+
+// ── Gesture classifiers ───────────────────────────────
+function extFingers(lm) {
+  // returns which fingers are extended as booleans [index,middle,ring,pinky]
+  return [
+    lm[8].y  < lm[6].y,
+    lm[12].y < lm[10].y,
+    lm[16].y < lm[14].y,
+    lm[20].y < lm[18].y,
+  ];
+}
+function isThumbExt(lm) { return lm[4].x < lm[3].x; } // for right hand (thumb extends left in mirrored)
+
+function isPinch(lm)  { return Math.hypot(lm[4].x-lm[8].x, lm[4].y-lm[8].y) < 0.065; }
+function isFist(lm)   {
+  const [i,m,r,p] = extFingers(lm);
+  return !i && !m && !r && !p && Math.hypot(lm[4].x-lm[8].x, lm[4].y-lm[8].y) > 0.07;
+}
+function isOpenPalm(lm) {
+  const [i,m,r,p] = extFingers(lm);
+  return i && m && r && p; // all 4 fingers up = idle regardless of thumb
+}
+
+// ☝️ Index only — only index extended
+function isIndex(lm)  {
+  const [i,m,r,p] = extFingers(lm);
+  return i && !m && !r && !p;
+}
+// ✌️ Peace — index + middle, ring + pinky down
+function isPeace(lm)  {
+  const [i,m,r,p] = extFingers(lm);
+  return i && m && !r && !p;
+}
+// 🤘 Rock — index + pinky up, middle + ring curled
+function isRock(lm)   {
+  const [i,m,r,p] = extFingers(lm);
+  return i && !m && !r && p;
+}
+// 👍 Thumb up — thumb extended, all fingers curled
+function isThumb(lm)  {
+  const [i,m,r,p] = extFingers(lm);
+  return !i && !m && !r && !p && isThumbExt(lm);
+}
+// 👆 Point (for sync) — index only pointing UP, same as index but we reuse isIndex
+// We separate by context: if not in creation mode, isIndex = sync trigger
+// Actually let's use a dedicated "gun" shape: index up + thumb out for sync
+function isGunPoint(lm) {
+  const [i,m,r,p] = extFingers(lm);
+  return i && !m && !r && !p && isThumbExt(lm); // index + thumb = gun/point
+}
+
+// Classify into a gesture key
+function classifyGesture(lm) {
+  if (isPinch(lm))    return 'pinch';
+  if (isFist(lm))     return 'fist';
+  if (isOpenPalm(lm)) return 'open';
+  if (isGunPoint(lm)) return 'gun';   // index + thumb → sync
+  if (isRock(lm))     return 'rock';  // index + pinky
+  if (isPeace(lm))    return 'peace'; // index + middle
+  if (isIndex(lm))    return 'index'; // index only
+  if (isThumb(lm))    return 'thumb'; // thumb only
+  return 'neutral';
+}
+
+const GESTURE_TO_COMP = {
+  index: COMP_MAP.index,
+  peace: COMP_MAP.peace,
+  rock:  COMP_MAP.rock,
+  thumb: COMP_MAP.thumb,
+};
+
+// ── Skeleton draw ─────────────────────────────────────
+const CONN=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+function drawSkeleton(lm, baseColor) {
+  const W=hCanvas.width, H=hCanvas.height;
+  const px=n=>(1-lm[n].x)*W, py=n=>lm[n].y*H;
+  hCtx.strokeStyle=baseColor.replace('0.9','0.18');
+  hCtx.lineWidth=1.2;
+  CONN.forEach(([a,b])=>{ hCtx.beginPath();hCtx.moveTo(px(a),py(a));hCtx.lineTo(px(b),py(b));hCtx.stroke(); });
+  lm.forEach((_,i)=>{
+    const isTip=[4,8,12,16,20].includes(i);
+    hCtx.beginPath();
+    hCtx.arc(px(i),py(i),isTip?4.5:i===0?5:2.2,0,Math.PI*2);
+    hCtx.fillStyle=(i===4||i===8)?baseColor:baseColor.replace('0.9','0.42');
+    hCtx.fill();
+  });
+}
+
+// ── Ring helpers ──────────────────────────────────────
+function setRing(id,arcId,frames,maxF,sx,sy,show) {
+  const ring=document.getElementById(id);
+  if(!show||frames===0){ring.style.display='none';return;}
+  ring.style.display='block';
+  ring.style.left=(sx-32)+'px'; ring.style.top=(sy-32)+'px';
+  document.getElementById(arcId).style.strokeDashoffset=169.6-(frames/maxF)*169.6;
+}
+
+// ── HUD ───────────────────────────────────────────────
+const HUDS={
+  pinch:        {e:'👌',t:'Pinching — drag to move'},
+  create_index: {e:'☝️',t:'Button — hold steady…'},
+  create_peace: {e:'✌️',t:'Card — hold steady…'},
+  create_rock:  {e:'🤘',t:'Input — hold steady…'},
+  create_thumb: {e:'👍',t:'Navbar — hold steady…'},
+  fist:         {e:'✊',t:'Hold to delete component'},
+  point:        {e:'🔫',t:'Hold to sync to Figma'},
+  spread:       {e:'↔️',t:'Spread — resizing card'},
+  idle:         {e:'✋',t:'Show your hands to begin'},
+  ready:        {e:'✋',t:'Make a gesture to create'},
+  cool:         {e:'⏳',t:'Ready for next gesture…'},
+};
+function setHUD(key){
+  const h=HUDS[key]||HUDS.ready;
+  document.getElementById('hud-icon').textContent=h.e;
+  const t=document.getElementById('hud-text');
+  t.textContent=h.t;
+  t.className=key!=='idle'&&key!=='ready'?'active':'';
+}
+
+// ── Main loop ─────────────────────────────────────────
+async function loop() {
+  if (!landmarker||video.readyState<2){requestAnimationFrame(loop);return;}
+  if (video.currentTime!==lastTime) {
+    lastTime=video.currentTime;
+    const res=landmarker.detectForVideo(video,performance.now());
+    hCtx.clearRect(0,0,hCanvas.width,hCanvas.height);
+
+    const lms=res.landmarks||[];
+
+    // Simple assignment: primary = lms[0], secondary = lms[1]
+    // No handedness lookup — avoids mirroring bugs and works regardless of which hand
+    const primaryLm   = lms[0] || null;
+    const secondaryLm = lms[1] || null;
+    // For display aliases
+    const rightLm = primaryLm;
+    const leftLm  = secondaryLm;
+
+    // Update status
+    setHandDot('rh', rightLm, 'on');
+    setHandDot('lh', leftLm,  'sky');
+
+    if (!rightLm&&!leftLm) {
+      hs.r.create=hs.r.fist=hs.r.point=hs.l.fist=0;
+      hideGhost(); ungrab();
+      setHUD('idle'); hideAllRings(); hideCursors();
+      requestAnimationFrame(loop); return;
+    }
+
+    if(rightLm) drawSkeleton(rightLm,'rgba(240,240,236,0.9)');
+    if(leftLm)  drawSkeleton(leftLm, 'rgba(147,210,255,0.9)');
+
+    let hudKey='ready';
+
+    // ── RIGHT HAND ────────────────────────────────────
+    if (rightLm) {
+      const pmx=(1-(rightLm[4].x+rightLm[8].x)/2)*window.innerWidth;
+      const pmy=((rightLm[4].y+rightLm[8].y)/2)*window.innerHeight;
+      lastRPos={x:pmx,y:pmy};
+
+      const cr=document.getElementById('cursor-r');
+      cr.style.display='block'; cr.style.left=pmx+'px'; cr.style.top=pmy+'px';
+
+      const g     = classifyGesture(rightLm);
+      const comp  = GESTURE_TO_COMP[g] || null;
+
+      cr.classList.toggle('pinch', g==='pinch');
+
+      const sr =stage.getBoundingClientRect();
+      const sx =pmx-sr.left, sy=pmy-sr.top;
+
+      // Tick cooldown
+      if(hs.r.cooldown>0) hs.r.cooldown--;
+
+      if (g === 'pinch') {
+        hs.r.create=hs.r.fist=hs.r.point=0;
+        hideGhost();
+        setRing('ring-r','arc-r',0,1,0,0,false);
+        hudKey='pinch';
+
+        cards.forEach(c=>c.el.classList.remove('near'));
+        if (!grabbedCard) {
+          const near=findNearest(pmx,pmy,130);
+          if(near){near.el.classList.add('near');grabCard(near,sx,sy);}
+        } else {
+          moveGrabbed(sx,sy);
+        }
+
+      } else {
+        if(grabbedCard) ungrab();
+        cards.forEach(c=>c.el.classList.remove('near'));
+
+        if (g === 'fist') {
+          hs.r.create=hs.r.point=0;
+          hs.r.fist++;
+          hideGhost();
+          hudKey='fist';
+          setRing('ring-r','arc-r',hs.r.fist,HOLD_ACT,pmx,pmy,true);
+          if(hs.r.fist>=HOLD_ACT){deleteNearOrGrabbed();hs.r.fist=0;setRing('ring-r','arc-r',0,1,0,0,false);}
+
+        } else if (g === 'gun') {
+          hs.r.create=hs.r.fist=0;
+          hs.r.point++;
+          hideGhost();
+          hudKey='point';
+          setRing('ring-r','arc-r',hs.r.point,HOLD_ACT,pmx,pmy,true);
+          if(hs.r.point>=HOLD_ACT){syncFigma();hs.r.point=0;setRing('ring-r','arc-r',0,1,0,0,false);}
+
+        } else if (g === 'open' || g === 'neutral') {
+          // Open palm or unrecognised = pure idle
+          hs.r.create=hs.r.fist=hs.r.point=0;
+          hs.r.prevFingers=-1;
+          hideGhost();
+          setRing('ring-r','arc-r',0,1,0,0,false);
+          hudKey='ready';
+
+        } else if (comp) {
+          hs.r.fist=hs.r.point=0;
+
+          // Reset debounce if gesture changed
+          if(hs.r.prevFingers !== g){ hs.r.create=0; hideGhost(); }
+          hs.r.prevFingers = g;
+
+          if(hs.r.cooldown>0){
+            hudKey='cool';
+            showGhost(comp,pmx,pmy);
+            setRing('ring-r','arc-r',0,1,0,0,false);
+          } else {
+            hs.r.create++;
+            hudKey='create_'+g;
+            showGhost(comp,pmx,pmy);
+            if(hs.r.create>=CREATE_DBG){
+              hideGhost();
+              spawnCard(comp,pmx,pmy);
+              showToast(comp.name+' created');
+              hs.r.create=0;
+              hs.r.cooldown=CREATE_CD;
+              hs.r.prevFingers=-1;
+            }
+          }
+
+        } else {
+          hs.r.create=hs.r.fist=hs.r.point=0;
+          hs.r.prevFingers=-1;
+          hideGhost();
+          setRing('ring-r','arc-r',0,1,0,0,false);
+        }
+      }
+    } else {
+      document.getElementById('cursor-r').style.display='none';
+      hs.r.create=hs.r.fist=hs.r.point=0;
+      if(grabbedCard) ungrab();
+      hideGhost();
+      setRing('ring-r','arc-r',0,1,0,0,false);
+    }
+
+    // ── LEFT HAND ─────────────────────────────────────
+    if (leftLm) {
+      const lmx=(1-(leftLm[4].x+leftLm[8].x)/2)*window.innerWidth;
+      const lmy=((leftLm[4].y+leftLm[8].y)/2)*window.innerHeight;
+      const cl=document.getElementById('cursor-l');
+      cl.style.display='block'; cl.style.left=lmx+'px'; cl.style.top=lmy+'px';
+      cl.classList.toggle('pinch',isPinch(leftLm));
+
+      // Two-hand spread → resize grabbed card
+      if (rightLm && grabbedCard) {
+        const r9=rightLm[9],l9=leftLm[9];
+        const spread=Math.hypot(r9.x-l9.x,r9.y-l9.y);
+        if(prevSpread!==null){
+          const delta=spread/prevSpread;
+          if(Math.abs(delta-1)>0.004){resizeGrabbed(delta);if(hudKey==='pinch')hudKey='spread';}
+        }
+        prevSpread=spread;
+      } else {
+        prevSpread=null;
+      }
+
+      // Left fist hold (alone) → cycle color scheme
+      if (isFist(leftLm)&&!rightLm) {
+        hs.l.fist++;
+        setRing('ring-l','arc-l',hs.l.fist,HOLD,lmx,lmy,true);
+        if(hs.l.fist>=HOLD){cycleScheme();hs.l.fist=0;setRing('ring-l','arc-l',0,1,0,0,false);}
+      } else {
+        hs.l.fist=0;
+        setRing('ring-l','arc-l',0,1,0,0,false);
+      }
+
+    } else {
+      document.getElementById('cursor-l').style.display='none';
+      prevSpread=null; hs.l.fist=0;
+      setRing('ring-l','arc-l',0,1,0,0,false);
+    }
+
+    setHUD(hudKey);
+  }
+  requestAnimationFrame(loop);
+}
+
+function setHandDot(id, lm, onClass) {
+  const dot=document.getElementById('d-'+id);
+  const stat=document.getElementById('s-'+id);
+  dot.className=lm?'dot '+onClass:'dot';
+  stat.className=lm?'stat live':'stat';
+}
+function hideAllRings(){
+  document.getElementById('ring-r').style.display='none';
+  document.getElementById('ring-l').style.display='none';
+}
+function hideCursors(){
+  document.getElementById('cursor-r').style.display='none';
+  document.getElementById('cursor-l').style.display='none';
+}
+
+// ── Color cycle ───────────────────────────────────────
+function cycleScheme(){
+  schemeIdx=(schemeIdx+1)%SCHEMES.length;
+  const v=SCHEMES[schemeIdx];
+  cards.forEach(c=>{
+    c.el.className='card'+(v!=='default'?' '+v:'');
+    if(c===grabbedCard)c.el.classList.add('grabbed');
+  });
+  showToast('Color: '+['Default','Sky','Mint','Amber','Rose'][schemeIdx]);
+}
+
+// ── WebSocket → Figma ─────────────────────────────────
+let ws=null;
+function wsConnect(){
+  ws=new WebSocket('ws://localhost:8000/ws/webapp');
+  ws.onopen =()=>{ document.getElementById('d-ws').className='dot on'; showToast('Figma relay connected'); };
+  ws.onmessage=e=>{ try{ const m=JSON.parse(e.data); if(m.type==='ACK')showToast(`↑ ${m.components} sent to Figma`); if(m.type==='PLACED_ACK')showToast(`✓ Figma placed ${m.count} node${m.count!==1?'s':''}`); }catch{} };
+  ws.onerror =()=>{ document.getElementById('d-ws').className='dot warn'; };
+  ws.onclose =()=>{ document.getElementById('d-ws').className='dot'; ws=null; setTimeout(wsConnect,4000); };
+}
+wsConnect();
+
+window.syncFigma=function(){
+  if(!cards.length){showToast('No components to sync');return;}
+  const payload={type:'SYNC_COMPONENTS',components:cards.map(c=>({
+    type:c.id,
+    x:parseInt(c.el.style.left)||0,
+    y:parseInt(c.el.style.top)||0,
+    width:c.el.offsetWidth,
+    height:c.el.offsetHeight,
+    colorScheme:SCHEMES[schemeIdx]||'default',
+  }))};
+  if(ws&&ws.readyState===1){
+    ws.send(JSON.stringify(payload));
+    showToast(`↑ Syncing ${cards.length} component${cards.length!==1?'s':''}…`);
+  } else {
+    console.log('[TACTILE] payload:',JSON.stringify(payload,null,2));
+    showToast('Not connected — payload in console');
+    wsConnect();
+  }
+};
+window.clearAll=clearAll;
+
+// ── Toast ──────────────────────────────────────────────
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2200);
+}
+
+// ── Mouse fallback ────────────────────────────────────
+function mouseGrab(e,data){
+  e.preventDefault();
+  const sr=stage.getBoundingClientRect();
+  grabCard(data,e.clientX-sr.left,e.clientY-sr.top);
+  const onMove=ev=>moveGrabbed(ev.clientX-sr.left,ev.clientY-sr.top);
+  const onUp=()=>{ ungrab(); window.removeEventListener('mousemove',onMove); window.removeEventListener('mouseup',onUp); };
+  window.addEventListener('mousemove',onMove);
+  window.addEventListener('mouseup',onUp);
+}
+
+// ── Init ──────────────────────────────────────────────
+async function init(){
+  function setLoad(p,m){document.getElementById('load-fill').style.width=p+'%';document.getElementById('load-sub').textContent=m;}
+  function resize(){hCanvas.width=window.innerWidth;hCanvas.height=window.innerHeight;}
+  resize(); window.addEventListener('resize',resize);
+
+  setLoad(15,'Requesting camera...');
+  try {
+    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:720}}});
+    video.srcObject=stream;
+    await new Promise(r=>{video.onloadedmetadata=r;});
+    document.getElementById('d-cam').className='dot on';
+    document.getElementById('s-cam').className='stat live';
+  } catch {
+    setLoad(100,'Camera unavailable — mouse mode');
+    setTimeout(fadeLoad,800); return;
+  }
+
+  setLoad(50,'Loading MediaPipe model...');
+  try {
+    const vision=await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm');
+    landmarker=await HandLandmarker.createFromOptions(vision,{
+      baseOptions:{
+        modelAssetPath:'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+        delegate:'GPU'
+      },
+      runningMode:'VIDEO', numHands:2,
+      minHandDetectionConfidence:0.6,
+      minHandPresenceConfidence:0.5,
+      minTrackingConfidence:0.5,
+    });
+    document.getElementById('d-mp').className='dot on';
+    document.getElementById('s-mp').className='stat live';
+  } catch(e){
+    console.warn('MediaPipe unavailable',e);
+    setLoad(100,'Hand tracking unavailable — mouse only');
+    setTimeout(fadeLoad,800); return;
+  }
+
+  setLoad(100,'Ready — show your hands');
+  setTimeout(()=>{fadeLoad();requestAnimationFrame(loop);},600);
+}
+
+function fadeLoad(){
+  const el=document.getElementById('loading');
+  el.style.opacity='0';
+  setTimeout(()=>el.style.display='none',500);
+}
+
+init();
+</script>
+</body>
+</html>

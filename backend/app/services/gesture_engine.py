@@ -18,6 +18,8 @@ def _clamp_size(value: int) -> int:
 def apply_gesture(current: CardState, event: GestureEvent) -> tuple[CardState, CardPatch]:
     if current.card_id != event.card_id:
         raise ValueError("event.card_id must match current_state.card_id")
+    if current.project_id != event.project_id:
+        raise ValueError("event.project_id must match current_state.project_id")
 
     size_step = abs(int(event.params.get("size_step", DEFAULT_SIZE_STEP)))
     size_step = min(size_step, MAX_SIZE_STEP)
@@ -59,6 +61,7 @@ def apply_gesture(current: CardState, event: GestureEvent) -> tuple[CardState, C
 
     patch = CardPatch(
         patch_id=str(uuid4()),
+        project_id=current.project_id,
         card_id=current.card_id,
         source_event_id=event.event_id,
         from_version=current.version,

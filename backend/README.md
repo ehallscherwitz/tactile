@@ -25,6 +25,7 @@ Example body:
 ```json
 {
   "current_state": {
+    "project_id": "default",
     "card_id": "card-1",
     "version": 1,
     "width": 320,
@@ -34,6 +35,7 @@ Example body:
   },
   "event": {
     "event_id": "evt-1",
+    "project_id": "default",
     "card_id": "card-1",
     "sequence_id": "seq-1",
     "intent": "increase_size",
@@ -55,6 +57,63 @@ Example body:
 4. Persist a gesture event:
    - `POST http://127.0.0.1:8000/api/v1/gestures/apply`
 5. Fetch current card:
-   - `GET http://127.0.0.1:8000/api/v1/cards/{card_id}`
+   - `GET http://127.0.0.1:8000/api/v1/cards/{card_id}?project_id=default`
 
 If `MONGODB_URI` is not set, persistence routes return `503` with a setup message.
+
+## Step 4: Plugin realtime sync (websocket + ack)
+
+- Plugin websocket endpoint:
+  - `ws://127.0.0.1:8000/api/v1/ws/plugin/{project_id}`
+- Backend sends patches as:
+  - `{"type":"card_patch","patch":{...}}`
+- Plugin sends ack as:
+  - `{"type":"ack","patch_id":"<patch-id>","status":"applied"}`
+  - or `{"type":"ack","patch_id":"<patch-id>","status":"failed","error":"reason"}`
+- Gesture apply route now persists patch delivery status and pushes live when plugin is connected.
+- Reconnect behavior:
+  - pending/failed patches replay automatically on websocket reconnect.
+
+## Step 5: Figma plugin live apply
+
+Use the plugin in `figma-plugin/` to connect Figma directly to backend websocket and apply live patches.
+
+Quick flow:
+
+1. Import plugin manifest in Figma desktop:
+   - `figma-plugin/manifest.json`
+2. Run plugin and connect websocket:
+   - `ws://127.0.0.1:8000/api/v1/ws/plugin/default`
+3. Trigger backend update:
+   - `POST /api/v1/gestures/apply` with `project_id=default`
+4. Verify plugin logs:
+   - receives `card_patch`
+   - applies node update
+   - sends `ack` back
+
+Plugin now also sends `hello` context on connect/selection/page change:
+
+- `{"type":"hello","project_id":"default","file_key":"...","page_id":"...","node_id":"..."}`
+
+Backend stores latest plugin session context per project in Mongo:
+
+- `GET /api/v1/plugin/sessions/{project_id}`
+
+Plugin can now send full current page JSON snapshot over websocket:
+
+- `{"type":"page_snapshot","project_id":"default","page_id":"...","page_json":{...}}`
+
+Backend stores latest snapshot in Mongo:
+
+- `GET /api/v1/plugin/snapshots/{project_id}/latest`
+
+## Step 6: Deterministic baseline from snapshot (no LLM yet)
+
+After plugin has synced page JSON, derive a `card_spec` from snapshot and initialize/update card defaults:
+
+- `POST /api/v1/cards/bootstrap-from-snapshot`
+  - body: `project_id`, `card_id`, `overwrite_existing_card` (optional)
+- get extracted spec:
+  - `GET /api/v1/cards/{card_id}/spec?project_id=default`
+
+This gives a reliable non-LLM baseline (size, color scheme, font defaults) before adding LangChain/Gemini.

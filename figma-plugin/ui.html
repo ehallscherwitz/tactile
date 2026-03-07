@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HACKAI Live Card Sync</title>
+    <style>
+      :root {
+        --bg: #111318;
+        --panel: #1a1f29;
+        --muted: #8d98ab;
+        --text: #f5f7fb;
+        --accent: #66b3ff;
+        --ok: #65d48a;
+        --err: #ff7b88;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        background: radial-gradient(circle at top right, #212a38, var(--bg));
+        color: var(--text);
+      }
+      .wrap {
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+        padding: 14px;
+        gap: 12px;
+      }
+      .card {
+        background: color-mix(in srgb, var(--panel), #000 12%);
+        border: 1px solid #2e3646;
+        border-radius: 12px;
+        padding: 12px;
+      }
+      h1 {
+        margin: 0 0 6px;
+        font-size: 14px;
+        font-weight: 700;
+      }
+      p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.5;
+      }
+      label {
+        display: block;
+        margin: 10px 0 6px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      input, button {
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid #3a455c;
+        background: #151a23;
+        color: var(--text);
+        font-size: 12px;
+        padding: 9px 10px;
+      }
+      input:focus {
+        outline: none;
+        border-color: var(--accent);
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+      }
+      .row button { width: auto; flex: 1; }
+      button {
+        cursor: pointer;
+        background: linear-gradient(180deg, #2d71ff, #1f4ec8);
+        border: 0;
+        font-weight: 600;
+      }
+      button.secondary {
+        background: #252f40;
+        border: 1px solid #3a455c;
+      }
+      .status {
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .status.ok { color: var(--ok); }
+      .status.err { color: var(--err); }
+      .status.neutral { color: var(--muted); }
+      .log {
+        margin-top: 8px;
+        max-height: 220px;
+        overflow: auto;
+        border-radius: 10px;
+        border: 1px solid #2e3646;
+        background: #10141c;
+        padding: 8px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 11px;
+        line-height: 1.4;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>HACKAI Live Sync</h1>
+        <p>Connect this plugin to backend websocket. Incoming card patches are applied immediately.</p>
+      </div>
+
+      <div class="card">
+        <label for="wsUrl">Backend WebSocket URL</label>
+        <input id="wsUrl" value="ws://127.0.0.1:8000/api/v1/ws/plugin/default" />
+        <label for="projectId">Project ID</label>
+        <input id="projectId" value="default" />
+        <div class="row" style="margin-top: 10px;">
+          <button id="connectBtn">Connect</button>
+          <button id="disconnectBtn" class="secondary">Disconnect</button>
+        </div>
+        <div class="row" style="margin-top: 8px;">
+          <button id="syncSnapshotBtn" class="secondary">Sync Page JSON</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div id="status" class="status neutral">Disconnected</div>
+        <div id="log" class="log"></div>
+      </div>
+    </div>
+
+    <script>
+      let socket = null;
+      const wsUrlInput = document.getElementById("wsUrl");
+      const projectIdInput = document.getElementById("projectId");
+      const connectBtn = document.getElementById("connectBtn");
+      const disconnectBtn = document.getElementById("disconnectBtn");
+      const syncSnapshotBtn = document.getElementById("syncSnapshotBtn");
+      const statusEl = document.getElementById("status");
+      const logEl = document.getElementById("log");
+
+      const ACK_QUEUE = new Map();
+      let latestPluginContext = null;
+      let latestSnapshot = null;
+
+      function appendLog(line) {
+        const timestamp = new Date().toLocaleTimeString();
+        logEl.textContent = `[${timestamp}] ${line}\n` + logEl.textContent;
+      }
+
+      function setStatus(text, type) {
+        statusEl.textContent = text;
+        statusEl.className = `status ${type}`;
+      }
+
+      function sendHelloToBackend() {
+        if (!socket || socket.readyState !== WebSocket.OPEN || !latestPluginContext) return;
+        const projectId = (projectIdInput.value || "default").trim();
+        socket.send(
+          JSON.stringify({
+            type: "hello",
+            project_id: projectId,
+            file_key: latestPluginContext.fileKey || null,
+            page_id: latestPluginContext.pageId,
+            node_id: latestPluginContext.nodeId || null
+          })
+        );
+        appendLog(
+          `hello sent (file=${latestPluginContext.fileKey || "draft"}, page=${latestPluginContext.pageId})`
+        );
+      }
+
+      function sendSnapshotToBackend() {
+        if (!socket || socket.readyState !== WebSocket.OPEN || !latestSnapshot) return;
+        const projectId = (projectIdInput.value || "default").trim();
+        socket.send(
+          JSON.stringify({
+            type: "page_snapshot",
+            project_id: projectId,
+            file_key: latestSnapshot.fileKey || null,
+            page_id: latestSnapshot.pageId,
+            node_id: latestSnapshot.nodeId || null,
+            captured_at: latestSnapshot.capturedAt,
+            page_json: latestSnapshot.pageJson
+          })
+        );
+        appendLog(`page snapshot sent (${latestSnapshot.pageId})`);
+      }
+
+      function disconnectSocket() {
+        if (socket) {
+          socket.onopen = null;
+          socket.onclose = null;
+          socket.onerror = null;
+          socket.onmessage = null;
+          socket.close();
+        }
+        socket = null;
+        setStatus("Disconnected", "neutral");
+        appendLog("Socket disconnected");
+      }
+
+      function connectSocket() {
+        const projectId = (projectIdInput.value || "default").trim();
+        const rawUrl = wsUrlInput.value.trim();
+        if (!rawUrl) {
+          setStatus("Missing websocket URL", "err");
+          return;
+        }
+
+        const url = new URL(rawUrl);
+        if (!url.pathname.endsWith(`/${projectId}`)) {
+          url.pathname = url.pathname.replace(/\/[^/]*$/, `/${projectId}`);
+        }
+        const socketUrl = url.toString();
+
+        disconnectSocket();
+        appendLog(`Connecting to ${socketUrl}`);
+        setStatus("Connecting...", "neutral");
+        parent.postMessage({ pluginMessage: { type: "set-project", projectId } }, "*");
+        socket = new WebSocket(socketUrl);
+
+        socket.onopen = () => {
+          setStatus(`Connected (${projectId})`, "ok");
+          appendLog("Socket connected");
+          parent.postMessage({ pluginMessage: { type: "request-context" } }, "*");
+          parent.postMessage({ pluginMessage: { type: "request-page-snapshot" } }, "*");
+        };
+
+        socket.onclose = () => {
+          setStatus("Disconnected", "neutral");
+          appendLog("Socket closed");
+          socket = null;
+        };
+
+        socket.onerror = () => {
+          setStatus("Socket error", "err");
+          appendLog("Socket error");
+        };
+
+        socket.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload.type === "card_patch" && payload.patch) {
+              const patch = payload.patch;
+              ACK_QUEUE.set(patch.patch_id, true);
+              appendLog(`Patch received: ${patch.patch_id}`);
+              parent.postMessage({ pluginMessage: { type: "apply-patch", patch } }, "*");
+              return;
+            }
+            if (payload.type === "hello_ack") {
+              appendLog(`hello acknowledged for project ${payload.project_id}`);
+              return;
+            }
+            if (payload.type === "page_snapshot_ack") {
+              appendLog(`page snapshot acknowledged (${payload.page_id})`);
+              return;
+            }
+            appendLog(`Message: ${event.data}`);
+          } catch (error) {
+            appendLog(`Invalid message payload: ${String(error)}`);
+          }
+        };
+      }
+
+      window.onmessage = (event) => {
+        const message = event.data.pluginMessage;
+        if (!message) return;
+
+        if (message.type === "plugin-context") {
+          latestPluginContext = message;
+          appendLog(
+            `context update file=${message.fileKey || "draft"} page=${message.pageId} node=${message.nodeId || "none"}`
+          );
+          sendHelloToBackend();
+          return;
+        }
+
+        if (message.type === "plugin-page-snapshot") {
+          latestSnapshot = message;
+          const sizeBytes = JSON.stringify(message.pageJson).length;
+          appendLog(`snapshot captured (${message.pageId}) size=${Math.round(sizeBytes / 1024)}KB`);
+          sendSnapshotToBackend();
+          return;
+        }
+
+        if (message.type === "plugin-page-snapshot-error") {
+          appendLog(`snapshot error: ${message.error}`);
+          return;
+        }
+
+        if (message.type !== "apply-result") return;
+
+        const patchId = message.patchId;
+        const status = message.status;
+        const error = message.error;
+        appendLog(`Patch ${patchId} -> ${status}${error ? ` (${error})` : ""}`);
+
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+          appendLog(`Cannot ack patch ${patchId}: socket not open`);
+          return;
+        }
+        if (!ACK_QUEUE.has(patchId)) {
+          appendLog(`Skipping unknown ack patch id ${patchId}`);
+          return;
+        }
+        ACK_QUEUE.delete(patchId);
+        socket.send(
+          JSON.stringify({
+            type: "ack",
+            patch_id: patchId,
+            status: status,
+            error: error || null
+          })
+        );
+      };
+
+      connectBtn.onclick = connectSocket;
+      disconnectBtn.onclick = disconnectSocket;
+      syncSnapshotBtn.onclick = () => {
+        parent.postMessage({ pluginMessage: { type: "request-page-snapshot" } }, "*");
+      };
+      parent.postMessage({ pluginMessage: { type: "request-context" } }, "*");
+    </script>
+  </body>
+</html>

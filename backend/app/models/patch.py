@@ -11,6 +11,7 @@ class CardOperation(BaseModel):
 
 class CardPatch(BaseModel):
     patch_id: str = Field(min_length=1)
+    project_id: str = Field(default="default", min_length=1)
     card_id: str = Field(min_length=1)
     source_event_id: str = Field(min_length=1)
     from_version: int = Field(ge=1)

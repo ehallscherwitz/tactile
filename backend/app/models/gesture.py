@@ -12,6 +12,7 @@ GestureIntent = Literal[
 
 class GestureEvent(BaseModel):
     event_id: str = Field(min_length=1)
+    project_id: str = Field(default="default", min_length=1)
     card_id: str = Field(min_length=1)
     sequence_id: str = Field(min_length=1)
     intent: GestureIntent

@@ -20,9 +20,14 @@ async def init_mongo() -> None:
 
 
 async def _ensure_indexes(db: AsyncIOMotorDatabase) -> None:
-    await db.cards.create_index([("card_id", ASCENDING)], unique=True)
+    await db.cards.create_index([("project_id", ASCENDING), ("card_id", ASCENDING)], unique=True)
     await db.gesture_events.create_index([("event_id", ASCENDING)], unique=True)
     await db.card_patches.create_index([("patch_id", ASCENDING)], unique=True)
+    await db.card_patches.create_index([("project_id", ASCENDING), ("to_version", ASCENDING)])
+    await db.plugin_sessions.create_index([("project_id", ASCENDING)], unique=True)
+    await db.plugin_page_snapshots.create_index([("project_id", ASCENDING), ("page_id", ASCENDING)])
+    await db.plugin_page_snapshots.create_index([("project_id", ASCENDING), ("updated_at", ASCENDING)])
+    await db.card_specs.create_index([("project_id", ASCENDING), ("card_id", ASCENDING)], unique=True)
 
 
 async def close_mongo() -> None:

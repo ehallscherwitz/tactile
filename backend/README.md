@@ -78,12 +78,21 @@ If `MONGODB_URI` is not set, persistence routes return `503` with a setup messag
 
 Use the plugin in `figma-plugin/` to connect Figma directly to backend websocket and apply live patches.
 
+### Start ngrok tunnel (required for Figma plugin websocket)
+
+```powershell
+python -c "from pyngrok import ngrok; t=ngrok.connect(8000, bind_tls=True); print(t.public_url); input('Press Enter to stop...')"
+```
+
+Note: each restart gives a new URL. Update plugin websocket field and manifest `allowedDomains` accordingly.
+
 Quick flow:
 
 1. Import plugin manifest in Figma desktop:
    - `figma-plugin/manifest.json`
 2. Run plugin and connect websocket:
-   - `ws://127.0.0.1:8000/api/v1/ws/plugin/default`
+   - `wss://<your-ngrok-domain>/api/v1/ws/plugin/default`
+   - Example: `wss://unlively-dextrocular-connor.ngrok-free.dev/api/v1/ws/plugin/default`
 3. Trigger backend update:
    - `POST /api/v1/gestures/apply` with `project_id=default`
 4. Verify plugin logs:

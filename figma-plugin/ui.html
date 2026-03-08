@@ -199,7 +199,40 @@
         appendLog("Socket disconnected");
       }
 
-      function connectSocket() {
+      async function warmUpNgrok(wsUrl) {
+        try {
+          const httpUrl = wsUrl
+            .replace(/^wss:\/\//, "https://")
+            .replace(/^ws:\/\//, "http://");
+          const base = new URL("/", httpUrl).toString();
+          appendLog("Bypassing ngrok interstitial...");
+          const resp = await fetch(base, {
+            method: "GET",
+            headers: { "ngrok-skip-browser-warning": "69420" },
+            mode: "cors",
+            credentials: "include"
+          });
+          appendLog("ngrok warm-up: " + resp.status);
+        } catch (err) {
+          try {
+            const httpUrl = wsUrl
+              .replace(/^wss:\/\//, "https://")
+              .replace(/^ws:\/\//, "http://");
+            const base = new URL("/", httpUrl).toString();
+            await fetch(base, {
+              method: "GET",
+              headers: { "ngrok-skip-browser-warning": "69420" },
+              mode: "no-cors",
+              credentials: "include"
+            });
+            appendLog("ngrok warm-up (no-cors fallback): sent");
+          } catch (e2) {
+            appendLog("ngrok warm-up failed: " + String(e2));
+          }
+        }
+      }
+
+      async function connectSocket() {
         const projectId = (projectIdInput.value || "default").trim();
         const rawUrl = wsUrlInput.value.trim();
         if (!rawUrl) {
@@ -214,9 +247,14 @@
         const socketUrl = url.toString();
 
         disconnectSocket();
-        appendLog(`Connecting to ${socketUrl}`);
         setStatus("Connecting...", "neutral");
         parent.postMessage({ pluginMessage: { type: "set-project", projectId } }, "*");
+
+        if (socketUrl.includes("ngrok")) {
+          await warmUpNgrok(socketUrl);
+        }
+
+        appendLog("Opening WebSocket to " + socketUrl);
         socket = new WebSocket(socketUrl);
 
         socket.onopen = () => {

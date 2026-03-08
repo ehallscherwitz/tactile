@@ -18,6 +18,11 @@ app.add_middleware(
 app.include_router(api_router, prefix=settings.api_v1_prefix)
 
 
+@app.get("/")
+def root() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 @app.on_event("startup")
 async def startup_event() -> None:
     await init_mongo()

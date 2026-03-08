@@ -1,7 +1,7 @@
 import { useRef, useEffect } from 'react';
 import { createAsciiCloudRenderer } from '../lib/asciiClouds';
 
-export default function AsciiCloudHome({ visible, handLandmarks }) {
+export default function AsciiCloudHome({ visible, loading, handLandmarks }) {
   const canvasRef = useRef(null);
   const rendererRef = useRef(null);
 
@@ -32,7 +32,7 @@ export default function AsciiCloudHome({ visible, handLandmarks }) {
         <div className="ascii-wordmark" data-text="tactile">tactile</div>
         <div className="ascii-tagline">design something soulful</div>
       </div>
-      <div className="ascii-instruction-wrap">
+      <div className={`ascii-instruction-wrap${loading ? '' : ' ascii-instruction-visible'}`}>
         <div className="ascii-instruction">hold 2 fingers up to continue</div>
       </div>
     </div>

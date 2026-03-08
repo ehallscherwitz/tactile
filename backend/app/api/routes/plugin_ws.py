@@ -5,6 +5,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from app.db.mongo import get_mongo_db
+from app.core.config import settings
 from app.models.plugin import PluginAckMessage, PluginHelloMessage, PluginPageSnapshotMessage
 from app.services.langchain_figma import generate_adaptive_frame
 from app.services.plugin_sync import (
@@ -118,9 +119,10 @@ async def plugin_websocket(
                     }
                 )
 
-                asyncio.create_task(
-                    _auto_adapt_frame(db, snapshot.project_id)
-                )
+                if settings.auto_adapt_on_snapshot:
+                    asyncio.create_task(
+                        _auto_adapt_frame(db, snapshot.project_id)
+                    )
                 continue
 
             await websocket.send_json({"type": "error", "message": "Unknown websocket message type"})

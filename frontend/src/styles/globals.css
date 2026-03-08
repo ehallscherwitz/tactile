@@ -812,6 +812,33 @@ body {
   align-items: center;
 }
 
+.sync-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.sync-btn {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.sync-btn.primary {
+  background: linear-gradient(180deg, #2d71ff, #1f4ec8);
+  border-color: rgba(132, 173, 255, 0.52);
+}
+
+.sync-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .bp-indicator {
   display: flex;
   align-items: center;

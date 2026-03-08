@@ -1,4 +1,6 @@
 from typing import Any
+from datetime import datetime, timezone
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -9,6 +11,7 @@ from app.services.langchain_figma import (
     generate_adaptive_frame,
     generate_frontend_card_payload,
     generate_frame_patch,
+    patch_to_frame_state,
     generate_reconciled_patch,
 )
 from app.services.plugin_sync import dispatch_patch_to_plugin
@@ -61,6 +64,25 @@ class RunAiFrameRequest(BaseModel):
     include_frontend_html: bool = Field(
         default=False,
         description="Return frontend-renderable HTML snippet along with patch.",
+    )
+
+
+class PullFromFigmaRequest(BaseModel):
+    project_id: str = Field(default="default", min_length=1)
+    base_card_id: str = Field(default="workflow-card", min_length=1)
+    prompt: str | None = Field(
+        default=None,
+        max_length=2000,
+        description="Optional direction for frame generation.",
+    )
+
+
+class PushToFigmaRequest(BaseModel):
+    project_id: str = Field(default="default", min_length=1)
+    workflow_id: str = Field(min_length=1)
+    final_frame_state: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Frontend final frame state (source of truth).",
     )
 
 
@@ -217,3 +239,116 @@ async def run_ai_frame(
     if frontend_card is not None:
         response["frontend_card"] = frontend_card
     return response
+
+
+@router.post("/pull-from-figma")
+async def pull_from_figma(
+    body: PullFromFigmaRequest,
+    db: AsyncIOMotorDatabase = Depends(require_mongo),
+) -> dict[str, Any]:
+    """Create frontend frame payload from latest Figma snapshot.
+
+    Does NOT dispatch to plugin (no frame is created in Figma during pull).
+    """
+    try:
+        payload = await generate_frontend_card_payload(
+            db=db,
+            project_id=body.project_id,
+            card_id=body.base_card_id,
+            prompt=body.prompt,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"LLM call failed: {exc}")
+
+    workflow_id = f"wf-{uuid.uuid4().hex[:12]}"
+    frame_state = patch_to_frame_state(payload["patch"])
+    now = datetime.now(timezone.utc)
+    await db.ai_workflows.update_one(
+        {"workflow_id": workflow_id, "project_id": body.project_id},
+        {
+            "$set": {
+                "workflow_id": workflow_id,
+                "project_id": body.project_id,
+                "base_card_id": body.base_card_id,
+                "pull_patch": payload["patch"],
+                "pull_frame_state": frame_state,
+                "frontend_card": payload["frontend_card"],
+                "status": "pulled",
+                "updated_at": now,
+                "created_at": now,
+            }
+        },
+        upsert=True,
+    )
+
+    return {
+        "status": "ok",
+        "workflow_id": workflow_id,
+        "project_id": body.project_id,
+        "base_card_id": body.base_card_id,
+        "frame_state": frame_state,
+        "frontend_card": payload["frontend_card"],
+    }
+
+
+@router.post("/push-to-figma")
+async def push_to_figma(
+    body: PushToFigmaRequest,
+    db: AsyncIOMotorDatabase = Depends(require_mongo),
+) -> dict[str, Any]:
+    """Push frontend-final frame state to Figma as a NEW derived frame."""
+    workflow = await db.ai_workflows.find_one(
+        {"workflow_id": body.workflow_id, "project_id": body.project_id}
+    )
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found. Run pull-from-figma first.")
+
+    base_card_id = str(workflow.get("base_card_id", "workflow-card"))
+    derived_card_id = f"{base_card_id}-derived-{uuid.uuid4().hex[:8]}"
+
+    final_state = body.final_frame_state or workflow.get("pull_frame_state") or {}
+    try:
+        patch = await generate_reconciled_patch(
+            db=db,
+            project_id=body.project_id,
+            card_id=derived_card_id,
+            final_frame_state=final_state,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"LLM call failed: {exc}")
+
+    patch["card_id"] = derived_card_id
+
+    await db.card_patches.insert_one(
+        {**patch, "delivery_status": "pending", "created_at": datetime.now(timezone.utc)}
+    )
+    await dispatch_patch_to_plugin(db, body.project_id, patch)
+
+    await db.ai_workflows.update_one(
+        {"workflow_id": body.workflow_id, "project_id": body.project_id},
+        {
+            "$set": {
+                "status": "pushed",
+                "final_frame_state": final_state,
+                "push_patch": patch,
+                "derived_card_id": derived_card_id,
+                "updated_at": datetime.now(timezone.utc),
+            }
+        },
+    )
+
+    return {
+        "status": "ok",
+        "workflow_id": body.workflow_id,
+        "derived_card_id": derived_card_id,
+        "patch_id": patch["patch_id"],
+        "patch": patch,
+    }

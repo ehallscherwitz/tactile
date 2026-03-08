@@ -771,6 +771,38 @@ def render_frontend_card_html(patch: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def patch_to_frame_state(patch: dict[str, Any]) -> dict[str, Any]:
+    """Extract canonical frontend frame state from a plugin patch."""
+    operations = patch.get("operations", [])
+    return {
+        "name": str(_op_value(operations, "/name", PLUGIN_DEFAULTS["/name"])),
+        "eyebrow": str(_op_value(operations, "/eyebrow", PLUGIN_DEFAULTS["/eyebrow"])),
+        "width": int(_op_value(operations, "/width", PLUGIN_DEFAULTS["/width"])),
+        "height": int(_op_value(operations, "/height", PLUGIN_DEFAULTS["/height"])),
+        "fill_rgb": _normalize_rgb_value(
+            _op_value(operations, "/fill_rgb", PLUGIN_DEFAULTS["/fill_rgb"]),
+            PLUGIN_DEFAULTS["/fill_rgb"],
+        ),
+        "text_rgb": _normalize_rgb_value(
+            _op_value(operations, "/text_rgb", PLUGIN_DEFAULTS["/text_rgb"]),
+            PLUGIN_DEFAULTS["/text_rgb"],
+        ),
+        "accent_rgb": _normalize_rgb_value(
+            _op_value(operations, "/accent_rgb", PLUGIN_DEFAULTS["/accent_rgb"]),
+            PLUGIN_DEFAULTS["/accent_rgb"],
+        ),
+        "corner_radius": int(_op_value(operations, "/corner_radius", PLUGIN_DEFAULTS["/corner_radius"])),
+        "font_family": str(_op_value(operations, "/font_family", PLUGIN_DEFAULTS["/font_family"])),
+        "font_size": int(_op_value(operations, "/font_size", PLUGIN_DEFAULTS["/font_size"])),
+        "title": str(_op_value(operations, "/title", PLUGIN_DEFAULTS["/title"])),
+        "subtitle": str(_op_value(operations, "/subtitle", PLUGIN_DEFAULTS["/subtitle"])),
+        "cta_text": str(_op_value(operations, "/cta_text", PLUGIN_DEFAULTS["/cta_text"])),
+        "meta_text": str(_op_value(operations, "/meta_text", PLUGIN_DEFAULTS["/meta_text"])),
+        "color_scheme": str(_op_value(operations, "/color_scheme", PLUGIN_DEFAULTS["/color_scheme"])),
+        "liquid_glass": bool(_op_value(operations, "/liquid_glass", PLUGIN_DEFAULTS["/liquid_glass"])),
+    }
+
+
 async def generate_adaptive_frame(
     db: AsyncIOMotorDatabase,
     project_id: str,

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createEngine } from './engine';
-import { FONT_OPTIONS, COLOR_SCHEMES } from './lib/components';
+import { BREAKPOINTS, FONT_OPTIONS, COLOR_SCHEMES, FONT_SIZES, BORDER_RADII } from './lib/components';
 import TopBar from './components/TopBar';
 import StatusBar from './components/StatusBar';
 import Legend from './components/Legend';
@@ -31,6 +31,68 @@ const DEFAULT_STYLES = {
   heroLayout: 'side-by-side',
 };
 
+const API_BASE = (import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
+
+const BACKEND_TO_FRONTEND_SCHEME = {
+  warm: 'amber',
+  cool: 'ocean',
+  dark: 'midnight',
+  bright: 'mono',
+  soft: 'violet',
+  moon: 'midnight',
+};
+
+const FRONTEND_TO_BACKEND_SCHEME = {
+  ocean: 'cool',
+  violet: 'soft',
+  mint: 'soft',
+  amber: 'warm',
+  rose: 'soft',
+  mono: 'bright',
+  midnight: 'dark',
+  sunset: 'warm',
+  forest: 'warm',
+};
+
+function hexToRgb(hex) {
+  if (!hex || typeof hex !== 'string') return null;
+  const clean = hex.replace('#', '').trim();
+  if (clean.length !== 6) return null;
+  const n = Number.parseInt(clean, 16);
+  if (Number.isNaN(n)) return null;
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+function closestFontSizeId(px) {
+  const target = Number(px) || 16;
+  let best = FONT_SIZES[0];
+  let bestDiff = Infinity;
+  for (const opt of FONT_SIZES) {
+    const val = Number.parseInt(String(opt.value).replace('px', ''), 10) || 16;
+    const diff = Math.abs(val - target);
+    if (diff < bestDiff) {
+      best = opt;
+      bestDiff = diff;
+    }
+  }
+  return best.id;
+}
+
+function closestRadiusId(px) {
+  const target = Number(px) || 8;
+  let best = BORDER_RADII[0];
+  let bestDiff = Infinity;
+  for (const opt of BORDER_RADII) {
+    const val = Number.parseInt(String(opt.value).replace('px', ''), 10) || 0;
+    const diff = Math.abs(val - target);
+    if (diff < bestDiff) {
+      best = opt;
+      bestDiff = diff;
+    }
+  }
+  return best.id;
+}
+
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [homeScreen, setHomeScreen] = useState(true);
@@ -52,6 +114,9 @@ export default function App() {
   const [styles, setStyles] = useState({ ...DEFAULT_STYLES });
   const [selectedComponent, setSelectedComponent] = useState(null);
   const [componentStyles, setComponentStyles] = useState({});
+  const [workflowId, setWorkflowId] = useState(null);
+  const [pulledFrameState, setPulledFrameState] = useState(null);
+  const [syncBusy, setSyncBusy] = useState({ pull: false, push: false });
 
   // Editor state
   const [editorOpen, setEditorOpen] = useState(false);
@@ -79,6 +144,98 @@ export default function App() {
   const handleResizeFrame = useCallback((bp) => {
     setBreakpoint(bp);
   }, []);
+
+  const handlePullFromFigma = useCallback(async () => {
+    if (syncBusy.pull) return;
+    setSyncBusy((s) => ({ ...s, pull: true }));
+    try {
+      const resp = await fetch(`${API_BASE}/api/v1/ai/pull-from-figma`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: 'default',
+          base_card_id: 'frontend-workflow',
+        }),
+      });
+      const body = await resp.json();
+      if (!resp.ok) throw new Error(body?.detail || `Pull failed (${resp.status})`);
+
+      const fs = body?.frame_state || {};
+      setWorkflowId(body.workflow_id || null);
+      setPulledFrameState(fs);
+      setFrameVisible(true);
+
+      const backendScheme = String(fs.color_scheme || 'dark').toLowerCase();
+      const frontendSchemeId = BACKEND_TO_FRONTEND_SCHEME[backendScheme] || 'midnight';
+      const frontendScheme = COLOR_SCHEMES.find((x) => x.id === frontendSchemeId) || COLOR_SCHEMES[0];
+      const pulledFont = String(fs.font_family || '').toLowerCase();
+      const fontOpt = FONT_OPTIONS.find((f) => f.name.toLowerCase() === pulledFont)
+        || FONT_OPTIONS.find((f) => pulledFont.includes(f.name.toLowerCase()))
+        || FONT_OPTIONS[0];
+
+      setStyles((prev) => ({
+        ...prev,
+        font: fontOpt,
+        colorScheme: frontendScheme,
+        fontSize: closestFontSizeId(fs.font_size),
+        borderRadius: closestRadiusId(fs.corner_radius),
+        effects: fs.liquid_glass ? ['liquid-glass'] : [],
+      }));
+
+      showToast('Pulled context from Figma');
+    } catch (err) {
+      showToast(`Pull failed: ${String(err?.message || err)}`);
+    } finally {
+      setSyncBusy((s) => ({ ...s, pull: false }));
+    }
+  }, [showToast, syncBusy.pull]);
+
+  const handlePushToFigma = useCallback(async () => {
+    if (syncBusy.push) return;
+    if (!workflowId) {
+      showToast('Pull from Figma first');
+      return;
+    }
+    setSyncBusy((s) => ({ ...s, push: true }));
+    try {
+      const bp = BREAKPOINTS[breakpoint] || BREAKPOINTS.desktop;
+      const cs = styles.colorScheme || COLOR_SCHEMES[0];
+      const backendScheme = FRONTEND_TO_BACKEND_SCHEME[cs.id] || 'dark';
+      const sizeOpt = FONT_SIZES.find((o) => o.id === styles.fontSize) || FONT_SIZES[2];
+      const radiusOpt = BORDER_RADII.find((o) => o.id === styles.borderRadius) || BORDER_RADII[2];
+
+      const finalFrameState = {
+        ...(pulledFrameState || {}),
+        width: bp.width,
+        height: Number(pulledFrameState?.height) || 900,
+        color_scheme: backendScheme,
+        fill_rgb: hexToRgb(cs.bg) || pulledFrameState?.fill_rgb,
+        text_rgb: hexToRgb(cs.text) || pulledFrameState?.text_rgb,
+        accent_rgb: hexToRgb(cs.primary) || pulledFrameState?.accent_rgb,
+        font_family: styles.font?.name || pulledFrameState?.font_family || 'Inter',
+        font_size: Number.parseInt(String(sizeOpt.value).replace('px', ''), 10) || 16,
+        corner_radius: Number.parseInt(String(radiusOpt.value).replace('px', ''), 10) || 8,
+        liquid_glass: (styles.effects || []).includes('liquid-glass'),
+      };
+
+      const resp = await fetch(`${API_BASE}/api/v1/ai/push-to-figma`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: 'default',
+          workflow_id: workflowId,
+          final_frame_state: finalFrameState,
+        }),
+      });
+      const body = await resp.json();
+      if (!resp.ok) throw new Error(body?.detail || `Push failed (${resp.status})`);
+      showToast('Pushed derived frame to Figma');
+    } catch (err) {
+      showToast(`Push failed: ${String(err?.message || err)}`);
+    } finally {
+      setSyncBusy((s) => ({ ...s, push: false }));
+    }
+  }, [breakpoint, pulledFrameState, showToast, styles, syncBusy.push, workflowId]);
 
   const handleDeleteFrame = useCallback(() => {
     setFrameVisible(false);
@@ -247,7 +404,16 @@ export default function App() {
 
       {!homeScreen && (
         <>
-          <TopBar hudInfo={hudInfo} breakpoint={breakpoint} frameVisible={frameVisible} />
+          <TopBar
+            hudInfo={hudInfo}
+            breakpoint={breakpoint}
+            frameVisible={frameVisible}
+            workflowId={workflowId}
+            pullBusy={syncBusy.pull}
+            pushBusy={syncBusy.push}
+            onPullFromFigma={handlePullFromFigma}
+            onPushToFigma={handlePushToFigma}
+          />
           <StatusBar status={status} breakpoint={breakpoint} frameVisible={frameVisible} />
           <Legend />
         </>

@@ -189,5 +189,13 @@ Optional fallback:
   - One-call abstraction for testing with plugin: generate from latest context and dispatch.
   - Optional `prompt` for quality direction.
   - Optional `include_frontend_html=true` to also get frontend render HTML in response.
+- `POST /api/v1/ai/pull-from-figma`
+  - Workflow step 1 (frontend button: **Pull from Figma**).
+  - Reads latest plugin snapshot, generates a frontend-ready frame payload, stores `workflow_id`.
+  - Does NOT dispatch a plugin patch (no Figma frame creation on pull).
+- `POST /api/v1/ai/push-to-figma`
+  - Workflow step 2 (frontend button: **Push to Figma**).
+  - Accepts `workflow_id` + frontend `final_frame_state` (frontend is source of truth).
+  - Reconciles with design context and dispatches a patch as a NEW derived frame in Figma.
 
 All routes persist a patch in MongoDB and dispatch it over plugin websocket (if connected).

@@ -30,7 +30,7 @@ export default function StyleEditor({
     <div className="se-panel-left">
       <div className="se-header">
         <span className="se-title">STYLE</span>
-        <button className="se-close" onClick={onClose} data-selectable="true">
+        <button type="button" className="se-close" onClick={onClose} data-selectable="true">
           <span className="se-close-x">[x]</span>
         </button>
       </div>
@@ -40,6 +40,7 @@ export default function StyleEditor({
       <div className="se-tabs">
         {TABS.map((t) => (
           <button
+            type="button"
             key={t.id}
             className={`se-tab${tab === t.id ? ' active' : ''}`}
             onClick={() => setTab(t.id)}
@@ -74,6 +75,7 @@ function OptionRow({ label, options, activeId, onSelect, fieldKey }) {
       <div className="se-option-pills">
         {options.map((o) => (
           <button
+            type="button"
             key={o.id}
             className={`se-pill${o.id === activeId ? ' active' : ''}`}
             onClick={() => onSelect(fieldKey, o.id)}
@@ -96,6 +98,7 @@ function TypePanel({ styles, onChange }) {
       <div className="se-grid-2">
         {FONT_OPTIONS.map((f) => (
           <button
+            type="button"
             key={f.id}
             className={`se-card${f.id === styles.font?.id ? ' selected' : ''}`}
             onClick={() => onChange('font', f)}
@@ -126,6 +129,7 @@ function ColorPanel({ styles, onChange }) {
       <div className="se-grid-2">
         {COLOR_SCHEMES.map((c) => (
           <button
+            type="button"
             key={c.id}
             className={`se-card se-color-card${c.id === styles.colorScheme?.id ? ' selected' : ''}`}
             onClick={() => onChange('colorScheme', c)}
@@ -166,6 +170,7 @@ function EffectsPanel({ styles, onChange }) {
           const isOn = activeEffects.includes(fx.id);
           return (
             <button
+              type="button"
               key={fx.id}
               className={`se-effect-row${isOn ? ' active' : ''}`}
               onClick={() => toggleEffect(fx.id)}
@@ -216,6 +221,7 @@ function LayoutPanel({ styles, onChange }) {
       <div className="se-grid-1">
         {HERO_LAYOUTS.map((h) => (
           <button
+            type="button"
             key={h.id}
             className={`se-card se-layout-card${h.id === styles.heroLayout ? ' selected' : ''}`}
             onClick={() => onChange('heroLayout', h.id)}

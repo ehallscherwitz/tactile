@@ -3,9 +3,53 @@ import {
   LETTER_SPACINGS, TEXT_TRANSFORMS, OPACITY_OPTIONS,
   BORDER_RADII, BORDER_WIDTHS, SHADOW_STYLES,
   PADDING_OPTIONS, GAP_OPTIONS, CONTENT_WIDTHS, ALIGNMENTS,
+  COLOR_SCHEMES,
 } from '../lib/components';
 
 const lookup = (arr, id) => arr.find((o) => o.id === id) || arr[2] || arr[0];
+
+function resolveOverridesToCss(overrides) {
+  if (!overrides || Object.keys(overrides).length === 0) return {};
+  const css = {};
+  if (overrides.fontSize != null) {
+    const o = lookup(FONT_SIZES, overrides.fontSize);
+    if (o) css.fontSize = o.value;
+  }
+  if (overrides.fontWeight != null) {
+    const o = lookup(FONT_WEIGHTS, overrides.fontWeight);
+    if (o) css.fontWeight = o.value;
+  }
+  if (overrides.lineHeight != null) {
+    const o = lookup(LINE_HEIGHTS, overrides.lineHeight);
+    if (o) css.lineHeight = o.value;
+  }
+  if (overrides.letterSpacing != null) {
+    const o = lookup(LETTER_SPACINGS, overrides.letterSpacing);
+    if (o) css.letterSpacing = o.value;
+  }
+  if (overrides.textTransform != null) {
+    const o = lookup(TEXT_TRANSFORMS, overrides.textTransform);
+    if (o) css.textTransform = o.value;
+  }
+  if (overrides.opacity != null) {
+    const o = lookup(OPACITY_OPTIONS, overrides.opacity);
+    if (o) css.opacity = o.value;
+  }
+  if (overrides.borderRadius != null) {
+    const o = lookup(BORDER_RADII, overrides.borderRadius);
+    if (o) css.borderRadius = o.value;
+  }
+  if (overrides.borderWidth != null) {
+    const o = lookup(BORDER_WIDTHS, overrides.borderWidth);
+    if (o) css.borderWidth = o.value;
+  }
+  if (overrides.shadow != null) {
+    const o = lookup(SHADOW_STYLES, overrides.shadow);
+    if (o) css.boxShadow = o.value;
+  }
+  if (overrides.font?.family) css.fontFamily = overrides.font.family;
+  return css;
+}
 
 export default function DesignFrame({
   breakpoint, styles, componentStyles,
@@ -29,6 +73,7 @@ export default function DesignFrame({
   const shadow = lookup(SHADOW_STYLES, s.shadow);
   const padding = lookup(PADDING_OPTIONS, s.padding);
   const sectionGap = lookup(GAP_OPTIONS, s.sectionGap);
+  const elementGap = lookup(GAP_OPTIONS, s.elementGap);
   const contentWidth = lookup(CONTENT_WIDTHS, s.contentWidth);
   const alignment = lookup(ALIGNMENTS, s.alignment);
 
@@ -71,11 +116,12 @@ export default function DesignFrame({
         }}
       >
         <FrameContent
-          colorScheme={s.colorScheme}
+          colorScheme={s.colorScheme && s.colorScheme.bg ? s.colorScheme : COLOR_SCHEMES[0]}
           effects={s.effects || []}
-          heroLayout={s.heroLayout}
+          heroLayout={s.heroLayout || 'side-by-side'}
           padding={padding}
           sectionGap={sectionGap}
+          elementGap={elementGap}
           contentWidth={contentWidth}
           alignment={alignment}
           borderRadius={borderRadius}
@@ -90,11 +136,12 @@ export default function DesignFrame({
 }
 
 function compStyle(componentStyles, id) {
-  return componentStyles?.[id] || {};
+  const raw = componentStyles?.[id] || {};
+  return resolveOverridesToCss(raw);
 }
 
 function FrameContent({
-  colorScheme, effects, heroLayout, padding, sectionGap,
+  colorScheme, effects, heroLayout, padding, sectionGap, elementGap,
   contentWidth, alignment, borderRadius, hasEffect,
   selectedComponent, onSelectComponent, componentStyles,
 }) {
@@ -192,7 +239,7 @@ function FrameContent({
             Describe your vision with human words like &ldquo;warm&rdquo; or &ldquo;approachable&rdquo;
             &mdash; we&rsquo;ll create soulful interfaces that feel intentional, not cheap.
           </p>
-          <div className="fc-cta-row" style={isCentered ? { justifyContent: 'center' } : {}}>
+          <div className="fc-cta-row" style={{ gap: elementGap.value, ...(isCentered ? { justifyContent: 'center' } : {}) }}>
             <button
               className={`fc-btn-primary fc-btn-lg${sel('btn-cta')}`}
               onClick={click('btn-cta')}

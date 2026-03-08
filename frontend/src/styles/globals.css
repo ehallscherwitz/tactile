@@ -445,7 +445,8 @@ body {
   color: rgba(255, 255, 255, 0.3);
   transition: color 0.15s;
 }
-.se-close:hover .se-close-x { color: rgba(255, 255, 255, 0.8); }
+.se-close:hover .se-close-x,
+.se-close.cursor-hover .se-close-x { color: rgba(255, 255, 255, 0.8); }
 
 .se-target {
   padding: 8px 14px;
@@ -478,7 +479,8 @@ body {
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
 }
-.se-tab:hover { color: rgba(255, 255, 255, 0.5); }
+.se-tab:hover,
+.se-tab.cursor-hover { color: rgba(255, 255, 255, 0.5); }
 .se-tab.active {
   color: rgba(255, 255, 255, 0.85);
   border-bottom-color: rgba(255, 255, 255, 0.5);

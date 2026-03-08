@@ -276,6 +276,7 @@ async def bootstrap_and_push(
         "dark": "Courier New",
         "bright": "Helvetica Neue",
         "soft": "Georgia",
+        "moon": "Georgia",
     }
     font_family = THEME_FONTS.get(scheme, spec.font_family)
 

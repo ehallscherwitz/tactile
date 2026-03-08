@@ -29,7 +29,8 @@ var THEMES = {
   cool:   { cardBg: rgb(13, 20, 36),  border: rgb(30, 58, 95),   accent: rgb(74, 156, 200), text: rgb(200, 223, 239) },
   dark:   { cardBg: rgb(10, 10, 10),  border: rgb(45, 27, 78),   accent: rgb(123, 47, 190), text: rgb(232, 232, 232) },
   bright: { cardBg: rgb(255, 255, 255), border: rgb(255, 107, 43), accent: rgb(255, 107, 43), text: rgb(15, 15, 15) },
-  soft:   { cardBg: rgb(250, 245, 255), border: rgb(201, 168, 224), accent: rgb(181, 123, 220), text: rgb(61, 33, 82) }
+  soft:   { cardBg: rgb(250, 245, 255), border: rgb(201, 168, 224), accent: rgb(181, 123, 220), text: rgb(61, 33, 82) },
+  moon:   { cardBg: rgb(13, 17, 23),   border: rgb(56, 68, 89),   accent: rgb(136, 176, 225), text: rgb(201, 215, 230) }
 };
 
 function colorForScheme(colorScheme) {
@@ -236,9 +237,9 @@ function applyLiquidGlass(node, enabled) {
         spread: 0
       },
       {
-        type: "LAYER_BLUR",
+        type: "BACKGROUND_BLUR",
         visible: true,
-        radius: 6
+        radius: 12
       }
     ];
   } else {

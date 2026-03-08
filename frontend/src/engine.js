@@ -39,11 +39,11 @@ export function createEngine(refs, callbacks) {
   const {
     onHudChange, onCardCountChange, onStatusChange,
     onToast, onLoadProgress, onReady,
+    onHandLandmarks, onDismissHome,
   } = callbacks;
 
   const ctx = canvas.getContext('2d');
   let landmarker = null;
-  let lastTime = -1;
   let running = true;
 
   const cards = [];
@@ -62,6 +62,7 @@ export function createEngine(refs, callbacks) {
 
   let ws = null;
   let prevHudKey = '';
+  let homeActive = true;
 
   // ── Helpers ──────────────────────────────────────────
 
@@ -306,14 +307,19 @@ export function createEngine(refs, callbacks) {
       return;
     }
 
-    if (video.currentTime !== lastTime) {
-      lastTime = video.currentTime;
+    {
       const res = landmarker.detectForVideo(video, performance.now());
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       const lms = res.landmarks || [];
-      const rightLm = lms[0] || null;
-      const leftLm = lms[1] || null;
+      const hands = res.handednesses || [];
+      let rightLm = null, leftLm = null;
+      for (let i = 0; i < lms.length; i++) {
+        const label = hands[i]?.[0]?.categoryName;
+        if (label === 'Left') rightLm = lms[i];
+        else if (label === 'Right') leftLm = lms[i];
+      }
+      if (!rightLm && lms.length === 1) rightLm = lms[0];
 
       onStatusChange((s) => {
         const newHand = !!rightLm;
@@ -328,11 +334,21 @@ export function createEngine(refs, callbacks) {
         setHUD('idle');
         hideAllRings();
         hideCursors();
+        if (onHandLandmarks) onHandLandmarks([]);
         requestAnimationFrame(loop);
         return;
       }
 
-      drawSkeleton(rightLm, 'rgba(240,240,236,0.9)');
+      // Send full landmark data to home screen for ASCII hand rendering
+      if (homeActive) {
+        const allHands = [];
+        allHands.push(rightLm);
+        if (leftLm) allHands.push(leftLm);
+        if (onHandLandmarks) onHandLandmarks(allHands);
+        hideCursors();
+      } else {
+        drawSkeleton(rightLm, 'rgba(240,240,236,0.9)');
+      }
 
       let hudKey = 'ready';
 
@@ -341,115 +357,128 @@ export function createEngine(refs, callbacks) {
       const pmy = ((rightLm[4].y + rightLm[8].y) / 2) * window.innerHeight;
       lastRPos = { x: pmx, y: pmy };
 
-      cursor.style.display = 'block';
-      cursor.style.left = pmx + 'px';
-      cursor.style.top = pmy + 'px';
+      if (!homeActive) {
+        cursor.style.display = 'block';
+        cursor.style.left = pmx + 'px';
+        cursor.style.top = pmy + 'px';
+      }
 
       const g = classifyGesture(rightLm);
       const comp = GESTURE_TO_COMP[g] || null;
 
-      cursor.classList.toggle('pinch', g === 'pinch');
+      if (homeActive && g === 'peace') {
+        homeActive = false;
+        if (onDismissHome) onDismissHome();
+      }
 
-      const sr = stage.getBoundingClientRect();
-      const sx = pmx - sr.left;
-      const sy = pmy - sr.top;
+      if (!homeActive) {
+        cursor.classList.toggle('pinch', g === 'pinch');
 
-      if (hs.cooldown > 0) hs.cooldown--;
+        const sr = stage.getBoundingClientRect();
+        const sx = pmx - sr.left;
+        const sy = pmy - sr.top;
 
-      if (g === 'pinch') {
-        hs.create = hs.fist = hs.point = 0;
-        hideGhost();
-        setRing(0, 1, 0, 0, false);
-        hudKey = 'pinch';
+        if (hs.cooldown > 0) hs.cooldown--;
 
-        cards.forEach((c) => c.el.classList.remove('near'));
-        if (!grabbedCard) {
-          const near = findNearest(pmx, pmy, 130);
-          if (near) { near.el.classList.add('near'); grabCard(near, sx, sy); }
-        } else {
-          moveGrabbed(sx, sy);
-        }
-      } else {
-        if (grabbedCard) ungrab();
-        cards.forEach((c) => c.el.classList.remove('near'));
-
-        if (g === 'fist') {
-          hs.create = hs.point = 0;
-          hs.fist++;
-          hideGhost();
-          hudKey = 'fist';
-          setRing(hs.fist, HOLD_ACT, pmx, pmy, true);
-          if (hs.fist >= HOLD_ACT) {
-            deleteNearOrGrabbed();
-            hs.fist = 0;
-            setRing(0, 1, 0, 0, false);
-          }
-        } else if (g === 'gun') {
-          hs.create = hs.fist = 0;
-          hs.point++;
-          hideGhost();
-          hudKey = 'point';
-          setRing(hs.point, HOLD_ACT, pmx, pmy, true);
-          if (hs.point >= HOLD_ACT) {
-            syncFigma();
-            hs.point = 0;
-            setRing(0, 1, 0, 0, false);
-          }
-        } else if (g === 'open' || g === 'neutral') {
+        if (g === 'pinch') {
           hs.create = hs.fist = hs.point = 0;
-          hs.prevFingers = -1;
           hideGhost();
           setRing(0, 1, 0, 0, false);
-          hudKey = 'ready';
-        } else if (comp) {
-          hs.fist = hs.point = 0;
+          hudKey = 'pinch';
 
-          if (hs.prevFingers !== g) { hs.create = 0; hideGhost(); }
-          hs.prevFingers = g;
-
-          if (hs.cooldown > 0) {
-            hudKey = 'cool';
-            showGhost(comp, pmx, pmy);
-            setRing(0, 1, 0, 0, false);
+          cards.forEach((c) => c.el.classList.remove('near'));
+          if (!grabbedCard) {
+            const near = findNearest(pmx, pmy, 130);
+            if (near) { near.el.classList.add('near'); grabCard(near, sx, sy); }
           } else {
-            hs.create++;
-            hudKey = 'create_' + g;
-            showGhost(comp, pmx, pmy);
-            if (hs.create >= CREATE_DBG) {
-              hideGhost();
-              spawnCard(comp, pmx, pmy);
-              onToast(comp.name + ' created');
-              hs.create = 0;
-              hs.cooldown = CREATE_CD;
-              hs.prevFingers = -1;
+            moveGrabbed(sx, sy);
+          }
+        } else {
+          if (grabbedCard) ungrab();
+          cards.forEach((c) => c.el.classList.remove('near'));
+
+          if (g === 'fist') {
+            hs.create = hs.point = 0;
+            hs.fist++;
+            hideGhost();
+            hudKey = 'fist';
+            setRing(hs.fist, HOLD_ACT, pmx, pmy, true);
+            if (hs.fist >= HOLD_ACT) {
+              deleteNearOrGrabbed();
+              hs.fist = 0;
+              setRing(0, 1, 0, 0, false);
+            }
+          } else if (g === 'gun') {
+            hs.create = hs.fist = 0;
+            hs.point++;
+            hideGhost();
+            hudKey = 'point';
+            setRing(hs.point, HOLD_ACT, pmx, pmy, true);
+            if (hs.point >= HOLD_ACT) {
+              syncFigma();
+              hs.point = 0;
+              setRing(0, 1, 0, 0, false);
+            }
+          } else if (g === 'open' || g === 'neutral') {
+            hs.create = hs.fist = hs.point = 0;
+            hs.prevFingers = -1;
+            hideGhost();
+            setRing(0, 1, 0, 0, false);
+            hudKey = 'ready';
+          } else if (comp) {
+            hs.fist = hs.point = 0;
+
+            if (hs.prevFingers !== g) { hs.create = 0; hideGhost(); }
+            hs.prevFingers = g;
+
+            if (hs.cooldown > 0) {
+              hudKey = 'cool';
+              showGhost(comp, pmx, pmy);
+              setRing(0, 1, 0, 0, false);
+            } else {
+              hs.create++;
+              hudKey = 'create_' + g;
+              showGhost(comp, pmx, pmy);
+              if (hs.create >= CREATE_DBG) {
+                hideGhost();
+                spawnCard(comp, pmx, pmy);
+                onToast(comp.name + ' created');
+                hs.create = 0;
+                hs.cooldown = CREATE_CD;
+                hs.prevFingers = -1;
+              }
+            }
+          } else {
+            hs.create = hs.fist = hs.point = 0;
+            hs.prevFingers = -1;
+            hideGhost();
+            setRing(0, 1, 0, 0, false);
+          }
+        }
+
+        if (leftLm) {
+          drawSkeleton(leftLm, 'rgba(240,240,236,0.9)');
+        }
+
+        // Two-hand resize
+        if (leftLm && grabbedCard) {
+          const r9 = rightLm[9];
+          const l9 = leftLm[9];
+          const spread = Math.hypot(r9.x - l9.x, r9.y - l9.y);
+          if (prevSpread !== null) {
+            const delta = spread / prevSpread;
+            if (Math.abs(delta - 1) > 0.004) {
+              resizeGrabbed(delta);
+              if (hudKey === 'pinch') hudKey = 'spread';
             }
           }
+          prevSpread = spread;
         } else {
-          hs.create = hs.fist = hs.point = 0;
-          hs.prevFingers = -1;
-          hideGhost();
-          setRing(0, 1, 0, 0, false);
+          prevSpread = null;
         }
-      }
 
-      // Two-hand resize
-      if (leftLm && grabbedCard) {
-        const r9 = rightLm[9];
-        const l9 = leftLm[9];
-        const spread = Math.hypot(r9.x - l9.x, r9.y - l9.y);
-        if (prevSpread !== null) {
-          const delta = spread / prevSpread;
-          if (Math.abs(delta - 1) > 0.004) {
-            resizeGrabbed(delta);
-            if (hudKey === 'pinch') hudKey = 'spread';
-          }
-        }
-        prevSpread = spread;
-      } else {
-        prevSpread = null;
+        setHUD(hudKey);
       }
-
-      setHUD(hudKey);
     }
 
     requestAnimationFrame(loop);
@@ -488,9 +517,9 @@ export function createEngine(refs, callbacks) {
         },
         runningMode: 'VIDEO',
         numHands: 2,
-        minHandDetectionConfidence: 0.6,
+        minHandDetectionConfidence: 0.5,
         minHandPresenceConfidence: 0.5,
-        minTrackingConfidence: 0.5,
+        minTrackingConfidence: 0.4,
       });
       onStatusChange((s) => ({ ...s, mp: true }));
     } catch (e) {
@@ -500,7 +529,7 @@ export function createEngine(refs, callbacks) {
       return;
     }
 
-    onLoadProgress(100, 'Ready — show your hands');
+    onLoadProgress(100, 'ready');
     setTimeout(() => {
       onReady();
       requestAnimationFrame(loop);

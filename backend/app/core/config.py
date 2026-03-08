@@ -7,6 +7,10 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     mongodb_uri: str | None = None
     mongodb_db_name: str = "hackai"
+    auto_adapt_on_snapshot: bool = False
+    llm_provider: str = "groq"
+    groq_api_key: str | None = None
+    groq_model: str = "llama-3.3-70b-versatile"
     google_api_key: str | None = None
 
     # Keep env loading flexible; no secrets required yet.

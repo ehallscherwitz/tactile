@@ -152,3 +152,42 @@ After plugin has synced page JSON, derive a `card_spec` from snapshot and initia
   - `GET /api/v1/cards/{card_id}/spec?project_id=default`
 
 This gives a reliable non-LLM baseline (size, color scheme, font defaults) before adding LangChain/Gemini.
+
+## Step 7: LangChain agent setup (Groq)
+
+The backend now includes LangChain-powered AI routes under `/api/v1/ai` with
+Groq as the default provider.
+
+### Env setup
+
+Add to `backend/.env`:
+
+- `AUTO_ADAPT_ON_SNAPSHOT=false` (recommended; prevents unsolicited auto cards on sync)
+- `LLM_PROVIDER=groq`
+- `GROQ_API_KEY=<your-key>`
+- `GROQ_MODEL=llama-3.3-70b-versatile` (or another Groq-supported chat model)
+
+Optional fallback:
+
+- `LLM_PROVIDER=google` (or `gemini`)
+- `GOOGLE_API_KEY=<your-key>`
+
+### AI routes
+
+- `POST /api/v1/ai/adapt-frame`
+  - Uses latest Figma snapshot + style extraction to create a contextual frame patch.
+- `POST /api/v1/ai/generate-frame`
+  - Prompt-driven frame patch generation.
+- `POST /api/v1/ai/reconcile-frame`
+  - Post-manipulation step: takes a `final_frame_state` JSON and generates a patch that
+    maps edited state back into the original design language.
+- `POST /api/v1/ai/frontend-card`
+  - Returns a `patch` plus a frontend-renderable `frontend_card.html` snippet built from
+    the same context (title/subtitle/fonts/colors).
+  - Optional `dispatch_to_plugin=true` if you want to send the patch to Figma too.
+- `POST /api/v1/ai/run`
+  - One-call abstraction for testing with plugin: generate from latest context and dispatch.
+  - Optional `prompt` for quality direction.
+  - Optional `include_frontend_html=true` to also get frontend render HTML in response.
+
+All routes persist a patch in MongoDB and dispatch it over plugin websocket (if connected).

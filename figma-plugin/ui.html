@@ -120,6 +120,9 @@
         <div class="row" style="margin-top: 8px;">
           <button id="syncSnapshotBtn" class="secondary">Sync Page JSON</button>
         </div>
+        <div class="row" style="margin-top: 8px;">
+          <button id="syncAndRunBtn" class="secondary">Sync + AI Run</button>
+        </div>
       </div>
 
       <div class="card">
@@ -135,12 +138,14 @@
       const connectBtn = document.getElementById("connectBtn");
       const disconnectBtn = document.getElementById("disconnectBtn");
       const syncSnapshotBtn = document.getElementById("syncSnapshotBtn");
+      const syncAndRunBtn = document.getElementById("syncAndRunBtn");
       const statusEl = document.getElementById("status");
       const logEl = document.getElementById("log");
 
       const ACK_QUEUE = new Map();
       let latestPluginContext = null;
       let latestSnapshot = null;
+      let runAiAfterNextSnapshotAck = false;
 
       function appendLog(line) {
         const timestamp = new Date().toLocaleTimeString();
@@ -197,6 +202,51 @@
         socket = null;
         setStatus("Disconnected", "neutral");
         appendLog("Socket disconnected");
+      }
+
+      function toHttpBase(wsLikeUrl) {
+        const u = new URL(wsLikeUrl);
+        if (u.protocol === "ws:") u.protocol = "http:";
+        if (u.protocol === "wss:") u.protocol = "https:";
+        return `${u.protocol}//${u.host}`;
+      }
+
+      async function triggerAiRun() {
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+          appendLog("AI run skipped: socket not connected");
+          return;
+        }
+
+        const projectId = (projectIdInput.value || "default").trim();
+        const wsRaw = wsUrlInput.value.trim();
+        const base = toHttpBase(wsRaw);
+        const endpoint = `${base}/api/v1/ai/run`;
+        const cardId = `ai-run-${projectId}`;
+        const defaultPrompt =
+          "Create a premium Tactile-style card that matches this page context and avoids generic copy.";
+
+        appendLog(`AI run request -> ${endpoint}`);
+        try {
+          const resp = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              project_id: projectId,
+              card_id: cardId,
+              prompt: defaultPrompt,
+              include_frontend_html: false
+            })
+          });
+          const body = await resp.json();
+          if (!resp.ok) {
+            appendLog(`AI run failed: ${resp.status} ${JSON.stringify(body)}`);
+            return;
+          }
+          const patchId = body?.patch?.patch_id || "unknown";
+          appendLog(`AI run queued patch: ${patchId}`);
+        } catch (err) {
+          appendLog(`AI run error: ${String(err)}`);
+        }
       }
 
       async function warmUpNgrok(wsUrl) {
@@ -291,6 +341,10 @@
             }
             if (payload.type === "page_snapshot_ack") {
               appendLog(`page snapshot acknowledged (${payload.page_id})`);
+              if (runAiAfterNextSnapshotAck) {
+                runAiAfterNextSnapshotAck = false;
+                triggerAiRun();
+              }
               return;
             }
             appendLog(`Message: ${event.data}`);
@@ -355,6 +409,10 @@
       connectBtn.onclick = connectSocket;
       disconnectBtn.onclick = disconnectSocket;
       syncSnapshotBtn.onclick = () => {
+        parent.postMessage({ pluginMessage: { type: "request-page-snapshot" } }, "*");
+      };
+      syncAndRunBtn.onclick = () => {
+        runAiAfterNextSnapshotAck = true;
         parent.postMessage({ pluginMessage: { type: "request-page-snapshot" } }, "*");
       };
       parent.postMessage({ pluginMessage: { type: "request-context" } }, "*");

@@ -10,7 +10,7 @@ Backend-first project for hand-signal-driven card updates in Figma.
 2. Install dependencies:
    - `python -m pip install -r backend/requirements.txt`
 3. Start the backend:
-   - `python -m uvicorn app.main:app --reload --app-dir backend`
+   - `python -m uvicorn app.main:app --reload --app-dir backend --env-file backend/.env`
 4. Verify health:
    - `GET http://127.0.0.1:8000/api/v1/health`
 

@@ -1,4 +1,6 @@
-export default function StatusBar({ status, cardCount }) {
+import { BREAKPOINTS } from '../lib/components';
+
+export default function StatusBar({ status, breakpoint, frameVisible }) {
   return (
     <div id="statusbar">
       <div className={`stat${status.cam ? ' live' : ''}`}>
@@ -13,12 +15,24 @@ export default function StatusBar({ status, cardCount }) {
         <div className={`dot${status.hand ? ' on' : ''}`} />
         <span>Hand</span>
       </div>
-      <div className={`stat${status.ws ? ' live' : ''}`}>
-        <div className={`dot${status.ws ? ' on' : ''}`} />
-        <span>Figma WS</span>
-      </div>
+
       <div className="stat stat-push">
-        {cardCount} component{cardCount !== 1 ? 's' : ''}
+        {frameVisible ? (
+          <>
+            <div className="dot on" />
+            <span>Frame: {BREAKPOINTS[breakpoint]?.label || breakpoint}</span>
+          </>
+        ) : (
+          <span>No frame</span>
+        )}
+      </div>
+
+      <div className="stat">
+        <span className="stat-keys">
+          <kbd>F</kbd> frame
+          <kbd>1-4</kbd> size
+          <kbd>E</kbd> edit
+        </span>
       </div>
     </div>
   );

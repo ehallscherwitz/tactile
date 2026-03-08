@@ -1,8 +1,10 @@
 {
-  "name": "HACKAI Live Card Sync",
-  "id": "hackai-live-card-sync",
+  "name": "hackai",
+  "id": "1612250856454613757",
   "api": "1.0.0",
   "main": "code.js",
-  "ui": "ui.html",
-  "editorType": ["figma", "dev"]
+  "capabilities": [],
+  "enableProposedApi": false,
+  "editorType": ["figma", "dev"],
+  "ui": "ui.html"
 }
